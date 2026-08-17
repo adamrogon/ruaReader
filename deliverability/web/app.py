@@ -15,16 +15,29 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import jobs
 from ..classify.esp import ESP_DISPLAY_ORDER
-from ..config import Settings, load_domains
+from ..config import Mailbox, Settings, load_domains
 from ..health import STALENESS_HOURS, domain_statuses, ingestion_health, localize_ingestion_health
 from ..i18n import DEFAULT_LANG, SUPPORTED_LANGS, resolve_lang, translate
-from ..storage import BounceRepository, DmarcRepository, DnsRepository, get_database
+from ..secrets import SecretsError
+from ..secrets import encrypt as encrypt_secret
+from ..secrets import is_configured as secret_key_configured
+from ..storage import (
+    AcknowledgementRepository,
+    BounceRepository,
+    DmarcRepository,
+    DnsRepository,
+    DomainConfigRepository,
+    MailboxConfigRepository,
+    get_database,
+)
+from ..validate import test_domain, test_mailbox
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -257,6 +270,308 @@ def api_esp(domain: Optional[str] = None, days: int = Query(7, ge=1, le=90)) -> 
             "forwarded": [vals["forwarded"] for _, vals in ordered],
         }
     )
+
+
+# --- Settings -----------------------------------------------------------------
+
+
+def _selectors_from_form(raw: str) -> List[str]:
+    """Parse the comma-separated selector field.
+
+    An empty field means "do not check DKIM", which is different from leaving
+    the domain's selectors at their defaults — so it is preserved as an empty
+    list rather than silently substituted.
+    """
+    return [s.strip() for s in (raw or "").replace("\n", ",").split(",") if s.strip()]
+
+
+@app.get("/settings")
+def settings_page(request: Request, notice: Optional[str] = None, error: Optional[str] = None):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    settings, database = ctx["settings"], ctx["database"]
+
+    domain_repo = DomainConfigRepository(database, settings.project_id)
+    mailbox_repo = MailboxConfigRepository(database, settings.project_id)
+
+    mailboxes = mailbox_repo.list_all()
+    return _render(
+        request,
+        "settings.html",
+        lang,
+        {
+            "domains": domain_repo.list_all(),
+            "rua_mailboxes": [m for m in mailboxes if m["kind"] == "rua"],
+            "bounce_mailboxes": [m for m in mailboxes if m["kind"] == "bounce"],
+            "secret_key_ok": secret_key_configured(),
+            "notice": notice,
+            "error": error,
+            "days": DEFAULT_WINDOW_DAYS,
+            "page": "settings",
+        },
+    )
+
+
+def _settings_redirect(lang: str, notice: Optional[str] = None, error: Optional[str] = None) -> RedirectResponse:
+    params = [f"lang={lang}"]
+    if notice:
+        params.append(f"notice={notice}")
+    if error:
+        params.append(f"error={error}")
+    # 303 so the browser re-issues as GET and a refresh does not resubmit.
+    return RedirectResponse(f"/settings?{'&'.join(params)}", status_code=303)
+
+
+@app.post("/settings/domains")
+def save_domain(
+    request: Request,
+    domain_id: Optional[int] = Form(None),
+    name: str = Form(...),
+    dkim_selectors: str = Form(""),
+    notes: str = Form(""),
+    enabled: Optional[str] = Form(None),
+):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+
+    clean_name = (name or "").strip().lower()
+    if not clean_name:
+        return _settings_redirect(lang, error="required")
+
+    selectors = _selectors_from_form(dkim_selectors)
+    is_enabled = enabled is not None
+
+    if domain_id:
+        repo.update(
+            domain_id, name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled
+        )
+    else:
+        if repo.get_by_name(clean_name):
+            return _settings_redirect(lang, error="domain_exists")
+        repo.create(name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled)
+
+    return _settings_redirect(lang, notice="domain_saved")
+
+
+@app.post("/settings/domains/{domain_id}/delete")
+def delete_domain(request: Request, domain_id: int):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    DomainConfigRepository(ctx["database"], ctx["settings"].project_id).delete(domain_id)
+    return _settings_redirect(lang, notice="domain_deleted")
+
+
+@app.post("/settings/mailboxes")
+def save_mailbox(
+    request: Request,
+    mailbox_id: Optional[int] = Form(None),
+    name: str = Form(...),
+    kind: str = Form("rua"),
+    host: str = Form(...),
+    port: int = Form(993),
+    ssl: Optional[str] = Form(None),
+    username: str = Form(...),
+    password: str = Form(""),
+    folder: str = Form("INBOX"),
+    processed_folder: str = Form(""),
+    domain: str = Form(""),
+    enabled: Optional[str] = Form(None),
+):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    repo = MailboxConfigRepository(ctx["database"], ctx["settings"].project_id)
+
+    clean_name = (name or "").strip()
+    if not clean_name or not host.strip() or not username.strip():
+        return _settings_redirect(lang, error="required")
+    if kind == "bounce" and not domain.strip():
+        return _settings_redirect(lang, error="required")
+
+    fields: Dict[str, Any] = {
+        "name": clean_name,
+        "kind": kind if kind in ("rua", "bounce") else "rua",
+        "host": host.strip(),
+        "port": int(port),
+        "ssl": ssl is not None,
+        "username": username.strip(),
+        "folder": (folder or "INBOX").strip(),
+        "processed_folder": processed_folder.strip() or None,
+        "domain": domain.strip().lower() or None,
+        "enabled": enabled is not None,
+    }
+
+    # An empty password field on an edit means "keep what is stored", so it is
+    # only written when the user actually typed something.
+    if password:
+        try:
+            fields["password_encrypted"] = encrypt_secret(password)
+            # A freshly typed password supersedes any .env reference.
+            fields["password_env"] = None
+        except SecretsError:
+            return _settings_redirect(lang, error="no_secret_key")
+
+    if mailbox_id:
+        repo.update(mailbox_id, **fields)
+    else:
+        existing = [m for m in repo.list_all() if m["name"] == clean_name]
+        if existing:
+            return _settings_redirect(lang, error="mailbox_exists")
+        repo.create(**fields)
+
+    return _settings_redirect(lang, notice="mailbox_saved")
+
+
+@app.post("/settings/mailboxes/{mailbox_id}/delete")
+def delete_mailbox(request: Request, mailbox_id: int):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    MailboxConfigRepository(ctx["database"], ctx["settings"].project_id).delete(mailbox_id)
+    return _settings_redirect(lang, notice="mailbox_deleted")
+
+
+@app.post("/api/test/mailbox")
+def api_test_mailbox(
+    request: Request,
+    mailbox_id: Optional[int] = Form(None),
+    # Defaults rather than Form(...): FastAPI treats an empty form field as a
+    # missing one and answers 422, which would surface as a blank error in the
+    # UI instead of "fill in the required fields".
+    host: str = Form(""),
+    port: int = Form(993),
+    ssl: Optional[str] = Form(None),
+    username: str = Form(""),
+    password: str = Form(""),
+    folder: str = Form("INBOX"),
+) -> JSONResponse:
+    """Test IMAP credentials from the form, before anything is saved."""
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    settings, database = ctx["settings"], ctx["database"]
+    repo = MailboxConfigRepository(database, settings.project_id)
+
+    if not host.strip() or not username.strip():
+        return JSONResponse({"ok": False, "message": translate("test.fields_missing", lang)})
+
+    stored_encrypted = None
+    stored_env = None
+    if mailbox_id and not password:
+        # Editing an existing mailbox without retyping the password: test the
+        # one already stored rather than refusing.
+        row = repo.get(mailbox_id)
+        if row:
+            stored_encrypted = row.get("password_encrypted")
+            stored_env = row.get("password_env")
+
+    candidate = Mailbox(
+        name="test",
+        host=host.strip(),
+        port=int(port),
+        ssl=ssl is not None,
+        username=username.strip(),
+        folder=(folder or "INBOX").strip(),
+        password_encrypted=stored_encrypted,
+        password_env=stored_env,
+    )
+
+    result = test_mailbox(candidate, password=password or None)
+    if mailbox_id:
+        repo.record_test(
+            mailbox_id,
+            ok=result["ok"],
+            error=None if result["ok"] else translate(result["message_key"], "en", **result["params"]),
+        )
+
+    return JSONResponse(
+        {"ok": result["ok"], "message": translate(result["message_key"], lang, **result["params"])}
+    )
+
+
+@app.post("/api/test/domain")
+def api_test_domain(
+    request: Request, name: str = Form(""), dkim_selectors: str = Form("")
+) -> JSONResponse:
+    """Check a domain resolves and has the records the tool depends on."""
+    lang = _resolve_request_lang(request)
+    if not name.strip():
+        return JSONResponse({"ok": False, "message": translate("test.fields_missing", lang)})
+
+    result = test_domain(name, _selectors_from_form(dkim_selectors))
+    return JSONResponse(
+        {
+            "ok": result["ok"],
+            "warning": result.get("warning", False),
+            "message": translate(result["message_key"], lang, **result["params"]),
+        }
+    )
+
+
+# --- Run now ------------------------------------------------------------------
+
+
+@app.post("/api/run/{stream}")
+def api_run_stream(request: Request, stream: str) -> JSONResponse:
+    """Trigger one ingestion stream on demand."""
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    result = jobs.start(stream, ctx["settings"], ctx["database"])
+
+    if result["started"]:
+        message = translate("action.started", lang, stream=translate(f"stream.{stream}", lang))
+    elif result["reason"] == "already_running":
+        message = translate("action.already_running", lang, stream=translate(f"stream.{stream}", lang))
+    else:
+        message = result["reason"] or ""
+
+    return JSONResponse({**result, "message": message})
+
+
+@app.get("/api/run/status")
+def api_run_status() -> JSONResponse:
+    """Which streams are mid-run, for the UI to poll after pressing the button."""
+    ctx = _context()
+    return JSONResponse({"running": jobs.running_streams(ctx["settings"], ctx["database"])})
+
+
+# --- Acknowledgements ---------------------------------------------------------
+
+
+@app.post("/api/flags/{domain}/ack")
+def api_ack_flag(
+    request: Request,
+    domain: str,
+    fingerprint: str = Form(...),
+    note: str = Form(""),
+    evidence_at: str = Form(""),
+) -> JSONResponse:
+    """Mark a flag as handled.
+
+    ``evidence_at`` is echoed back from the rendered flag so the
+    acknowledgement is pinned to the evidence the user actually looked at —
+    anything newer reopens it. See health._apply_acknowledgements.
+    """
+    ctx = _context()
+    repo = AcknowledgementRepository(ctx["database"], ctx["settings"].project_id)
+
+    parsed_evidence: Optional[dt.datetime] = None
+    if evidence_at:
+        try:
+            parsed_evidence = dt.datetime.fromisoformat(evidence_at)
+            if parsed_evidence.tzinfo is None:
+                parsed_evidence = parsed_evidence.replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            parsed_evidence = None
+
+    repo.acknowledge(domain, fingerprint, note=note.strip() or None, evidence_at=parsed_evidence)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/flags/{domain}/unack")
+def api_unack_flag(request: Request, domain: str, fingerprint: str = Form(...)) -> JSONResponse:
+    """Undo an acknowledgement."""
+    ctx = _context()
+    AcknowledgementRepository(ctx["database"], ctx["settings"].project_id).clear(domain, fingerprint)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/health")

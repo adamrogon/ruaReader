@@ -14,6 +14,7 @@ compliance rate.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -21,6 +22,7 @@ from .classify.esp import ESP_DISPLAY_ORDER
 from .config import Domain, Settings, load_domains
 from .i18n import Nested, translate
 from .storage import (
+    AcknowledgementRepository,
     BlacklistRepository,
     BounceRepository,
     Database,
@@ -83,6 +85,15 @@ class Flag:
     parameters rather than finished sentences — the language a user has
     selected is a property of a request, not of the data, so text is resolved
     once, at render time, via :meth:`localize`.
+
+    ``urgency_weight`` is this flag's own contribution to the domain's sort
+    position, held per-flag rather than accumulated into a running total so an
+    acknowledged flag can simply be left out of the sum.
+
+    ``evidence_at`` is the timestamp of the newest thing that caused the flag
+    (most recent rejection, most recent DNS check). It is what makes
+    acknowledgement safe: acknowledging four rejections must not silently
+    swallow a fifth one that arrives tomorrow.
     """
 
     severity: str
@@ -92,8 +103,26 @@ class Flag:
     title_params: Dict[str, Any] = field(default_factory=dict)
     message_params: Dict[str, Any] = field(default_factory=dict)
     esp: Optional[str] = None
+    urgency_weight: int = 0
+    evidence_at: Optional[dt.datetime] = None
 
-    def localize(self, lang: str) -> Dict[str, Any]:
+    # Set by _apply_acknowledgements(); not part of the flag's identity.
+    acknowledged: bool = False
+    ack_note: Optional[str] = None
+    ack_at: Optional[dt.datetime] = None
+
+    def fingerprint(self, domain: str) -> str:
+        """Stable identity of this *kind* of problem on this domain.
+
+        Built from the message type and provider, deliberately excluding
+        counts and rates — otherwise "4 rejections" and "5 rejections" would be
+        different flags and an acknowledgement would never stick for more than
+        one ingestion run.
+        """
+        raw = f"{domain}|{self.source}|{self.title_key}|{self.esp or ''}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+    def localize(self, lang: str, domain: str = "") -> Dict[str, Any]:
         """Resolve title/message to text in ``lang``.
 
         Any :class:`~deliverability.i18n.Nested` value in the params dicts is
@@ -105,6 +134,11 @@ class Flag:
             "message": translate(self.message_key, lang, **self.message_params),
             "source": translate(f"source.{self.source}", lang),
             "esp": self.esp,
+            "fingerprint": self.fingerprint(domain),
+            "acknowledged": self.acknowledged,
+            "ack_note": self.ack_note,
+            "ack_at": self.ack_at,
+            "evidence_at": self.evidence_at,
         }
 
 
@@ -124,13 +158,18 @@ class DomainStatus:
         handing it to a template; nothing upstream needs to know which
         language is active.
         """
-        localized_flags = [f.localize(lang) for f in self.flags]
+        localized_flags = [f.localize(lang, self.domain) for f in self.flags]
+        # The headline answers "can I send from here today", so it speaks for
+        # the problems still outstanding — acknowledged ones are excluded.
+        open_flags = [f for f in localized_flags if not f["acknowledged"]]
         return {
             "domain": self.domain,
             "urgency": self.urgency,
             "severity": self.severity,
-            "headline": _headline_text(self, localized_flags, lang),
+            "headline": _headline_text(self, open_flags, lang),
             "flags": localized_flags,
+            "open_flag_count": len(open_flags),
+            "acknowledged_count": len(localized_flags) - len(open_flags),
             "metrics": self.metrics,
             "esp_rows": self.esp_rows,
         }
@@ -243,6 +282,46 @@ def _compliance_from_rows(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _recompute(status: DomainStatus) -> None:
+    """Derive urgency and severity from the flags that are still open.
+
+    Acknowledged flags contribute nothing, which is exactly what moves a
+    handled domain back down the list without deleting the evidence.
+    """
+    open_flags = [f for f in status.flags if not f.acknowledged]
+    status.urgency = sum(f.urgency_weight for f in open_flags)
+    status.severity = open_flags[0].severity if open_flags else "ok"
+    if status.severity == "info" and status.urgency < URGENCY_NO_DATA:
+        status.severity = "ok"
+
+
+def _apply_acknowledgements(status: DomainStatus, acks: Dict[str, Dict[str, Any]]) -> None:
+    """Mark flags the user has said they know about, then re-derive urgency.
+
+    An acknowledgement is tied to the evidence that existed when it was made.
+    If something newer has arrived since — another rejection, a fresh DNS
+    check that still fails — the acknowledgement no longer applies and the
+    flag returns at full weight. Silence about a *new* problem would defeat
+    the point of the tool.
+    """
+    for flag in status.flags:
+        ack = acks.get(f"{status.domain}|{flag.fingerprint(status.domain)}")
+        if not ack:
+            flag.acknowledged = False
+            flag.ack_note = None
+            flag.ack_at = None
+            continue
+
+        ack_evidence = _as_aware(ack.get("evidence_at"))
+        superseded = bool(flag.evidence_at and ack_evidence and flag.evidence_at > ack_evidence)
+
+        flag.acknowledged = not superseded
+        flag.ack_note = ack.get("note") if flag.acknowledged else None
+        flag.ack_at = _as_aware(ack.get("acknowledged_at")) if flag.acknowledged else None
+
+    _recompute(status)
+
+
 def build_domain_status(
     domain_name: str,
     dns_row: Optional[Dict[str, Any]],
@@ -251,15 +330,14 @@ def build_domain_status(
     bounce_classes: Dict[str, int],
     sender_blocks: Sequence[Dict[str, Any]],
     blacklist_rows: Sequence[Dict[str, Any]],
+    latest_bounce_at: Optional[dt.datetime] = None,
 ) -> DomainStatus:
     """Assemble one domain's status from the four streams."""
     status = DomainStatus(domain=domain_name)
     flags: List[Flag] = []
-    urgency = 0
 
     # --- Sender blocks: the single most important signal -------------------
     if sender_blocks:
-        urgency += URGENCY_SENDER_BLOCK
         by_esp: Dict[str, int] = {}
         for row in sender_blocks:
             by_esp[row.get("recipient_esp") or "Unknown"] = by_esp.get(row.get("recipient_esp") or "Unknown", 0) + 1
@@ -267,15 +345,26 @@ def build_domain_status(
         codes = sorted({row.get("status_code") for row in sender_blocks if row.get("status_code")})
         codes_suffix = Nested("flag.sender_block.codes_suffix", codes=", ".join(codes)) if codes else Nested(None)
 
+        def _latest_for(esp_name: Optional[str] = None) -> Optional[dt.datetime]:
+            stamps = [
+                _as_aware(r.get("received_at"))
+                for r in sender_blocks
+                if esp_name is None or (r.get("recipient_esp") or "Unknown") == esp_name
+            ]
+            stamps = [s for s in stamps if s]
+            return max(stamps) if stamps else None
+
         flags.append(
             Flag(
                 severity="critical",
                 title_key="flag.sender_block.title",
-                title_params={"esp": worst_esp, "count": len(sender_blocks)},
+                title_params={"esp": worst_esp, "count": by_esp[worst_esp]},
                 message_key="flag.sender_block.message",
                 message_params={"esp": worst_esp, "codes_suffix": codes_suffix},
                 source="bounce",
                 esp=worst_esp,
+                urgency_weight=URGENCY_SENDER_BLOCK,
+                evidence_at=_latest_for(worst_esp),
             )
         )
         for esp, count in sorted(by_esp.items(), key=lambda kv: -kv[1])[1:]:
@@ -288,13 +377,14 @@ def build_domain_status(
                     message_params={"esp": esp},
                     source="bounce",
                     esp=esp,
+                    urgency_weight=URGENCY_SENDER_BLOCK,
+                    evidence_at=_latest_for(esp),
                 )
             )
 
     # --- Blacklist ---------------------------------------------------------
     listed = [row for row in blacklist_rows if row.get("listed")]
     if listed:
-        urgency += URGENCY_BLACKLISTED
         names = sorted({name for row in listed for name in (row.get("listed_by") or [])})
         ips = sorted({row["ip"] for row in listed})
 
@@ -310,6 +400,9 @@ def build_domain_status(
         else:
             detail = Nested("flag.blacklist.detail_mixed")
 
+        checks = [_as_aware(r.get("checked_at")) for r in listed]
+        checks = [c for c in checks if c]
+
         flags.append(
             Flag(
                 severity="critical",
@@ -322,17 +415,21 @@ def build_domain_status(
                     "detail": detail,
                 },
                 source="dnsbl",
+                urgency_weight=URGENCY_BLACKLISTED,
+                evidence_at=max(checks) if checks else None,
             )
         )
 
     # --- DNS ---------------------------------------------------------------
     if dns_row:
+        checked_at = _as_aware(dns_row.get("checked_at"))
         for warning in dns_row.get("warnings") or []:
             severity = warning.get("severity", "info")
-            if severity == "critical":
-                urgency += URGENCY_DNS_CRITICAL
-            elif severity == "warning":
-                urgency += URGENCY_DNS_WARNING
+            weight = (
+                URGENCY_DNS_CRITICAL
+                if severity == "critical"
+                else (URGENCY_DNS_WARNING if severity == "warning" else 0)
+            )
             flags.append(
                 Flag(
                     severity=severity,
@@ -341,6 +438,8 @@ def build_domain_status(
                     message_key=warning.get("message_key", "flag.dns.spf_error.title"),
                     message_params=warning.get("message_params") or {},
                     source="dns",
+                    urgency_weight=weight,
+                    evidence_at=checked_at,
                 )
             )
 
@@ -356,7 +455,6 @@ def build_domain_status(
 
     if hard_rate is not None:
         if hard_rate >= HARD_BOUNCE_RATE_CRITICAL:
-            urgency += URGENCY_HIGH_HARD_BOUNCE
             flags.append(
                 Flag(
                     severity="critical",
@@ -365,10 +463,11 @@ def build_domain_status(
                     message_key="flag.bounce.hard_rate_critical.message",
                     message_params={"hard": hard, "sent": sent_estimate, "threshold": HARD_BOUNCE_RATE_CRITICAL},
                     source="bounce",
+                    urgency_weight=URGENCY_HIGH_HARD_BOUNCE,
+                    evidence_at=latest_bounce_at,
                 )
             )
         elif hard_rate >= HARD_BOUNCE_RATE_WARN:
-            urgency += URGENCY_SOFT_BOUNCE
             flags.append(
                 Flag(
                     severity="warning",
@@ -377,6 +476,8 @@ def build_domain_status(
                     message_key="flag.bounce.hard_rate_warning.message",
                     message_params={"hard": hard, "sent": sent_estimate, "threshold": HARD_BOUNCE_RATE_WARN},
                     source="bounce",
+                    urgency_weight=URGENCY_SOFT_BOUNCE,
+                    evidence_at=latest_bounce_at,
                 )
             )
 
@@ -388,6 +489,7 @@ def build_domain_status(
                 title_params={"count": unknown},
                 message_key="flag.bounce.unparsed.message",
                 source="bounce",
+                evidence_at=latest_bounce_at,
             )
         )
 
@@ -395,13 +497,14 @@ def build_domain_status(
     rate = compliance.get("compliance")
     if rate is not None:
         if rate < COMPLIANCE_CRITICAL:
-            urgency += URGENCY_LOW_COMPLIANCE
             severity = "critical"
+            weight = URGENCY_LOW_COMPLIANCE
         elif rate < COMPLIANCE_WARN:
-            urgency += URGENCY_LOW_COMPLIANCE // 2
             severity = "warning"
+            weight = URGENCY_LOW_COMPLIANCE // 2
         else:
             severity = None
+            weight = 0
 
         if severity:
             worst = _worst_esp(esp_rows)
@@ -420,26 +523,26 @@ def build_domain_status(
                     },
                     source="rua",
                     esp=worst,
+                    urgency_weight=weight,
                 )
             )
 
     if compliance.get("total", 0) == 0:
-        urgency += URGENCY_NO_DATA
         flags.append(
             Flag(
                 severity="info",
                 title_key="flag.rua.no_data.title",
                 message_key="flag.rua.no_data.message",
                 source="rua",
+                urgency_weight=URGENCY_NO_DATA,
             )
         )
 
     # --- Roll up -----------------------------------------------------------
-    status.urgency = urgency
     status.flags = sorted(flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
-    status.severity = status.flags[0].severity if status.flags else "ok"
-    if status.severity == "info" and urgency < URGENCY_NO_DATA:
-        status.severity = "ok"
+    # Urgency and severity are derived in _recompute(), which is also what
+    # runs again after acknowledgements are applied.
+    _recompute(status)
 
     status.metrics = {
         "messages": compliance.get("total", 0),
@@ -541,6 +644,7 @@ def domain_statuses(
     dns_repo = DnsRepository(database, settings.project_id)
     bounce_repo = BounceRepository(database, settings.project_id)
     blacklist_repo = BlacklistRepository(database, settings.project_id)
+    ack_repo = AcknowledgementRepository(database, settings.project_id)
 
     since = _utcnow() - dt.timedelta(days=window_days)
 
@@ -550,6 +654,14 @@ def domain_statuses(
     block_rows = bounce_repo.sender_blocks(since)
     dns_latest = dns_repo.latest_per_domain()
     blacklist_latest = blacklist_repo.latest_per_domain()
+    acks = ack_repo.list_active()
+
+    # Newest bounce per domain, used as the evidence marker for rate-derived
+    # flags that have no single triggering event of their own.
+    latest_bounce = {
+        row["domain"]: _as_aware(row["latest"])
+        for row in bounce_repo.latest_per_domain(since)
+    }
 
     def rows_for(rows: Sequence[Dict[str, Any]], name: str) -> List[Dict[str, Any]]:
         return [r for r in rows if r.get("domain") == name]
@@ -559,17 +671,18 @@ def domain_statuses(
         bounce_classes = {
             r["bounce_class"]: r["count"] for r in bounce_rows if r.get("domain") == domain.name
         }
-        statuses.append(
-            build_domain_status(
-                domain_name=domain.name,
-                dns_row=dns_latest.get(domain.name),
-                compliance=_compliance_from_rows(rows_for(compliance_rows, domain.name)),
-                esp_rows=rows_for(esp_rows, domain.name),
-                bounce_classes=bounce_classes,
-                sender_blocks=rows_for(block_rows, domain.name),
-                blacklist_rows=blacklist_latest.get(domain.name, []),
-            )
+        status = build_domain_status(
+            domain_name=domain.name,
+            dns_row=dns_latest.get(domain.name),
+            compliance=_compliance_from_rows(rows_for(compliance_rows, domain.name)),
+            esp_rows=rows_for(esp_rows, domain.name),
+            bounce_classes=bounce_classes,
+            sender_blocks=rows_for(block_rows, domain.name),
+            blacklist_rows=blacklist_latest.get(domain.name, []),
+            latest_bounce_at=latest_bounce.get(domain.name),
         )
+        _apply_acknowledgements(status, acks)
+        statuses.append(status)
 
     # Worst first; alphabetical only as a tie-break among equally healthy ones.
     return sorted(statuses, key=lambda s: (-s.urgency, s.domain))

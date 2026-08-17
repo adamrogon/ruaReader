@@ -8,11 +8,14 @@ code.
 
 from .database import Database, get_database
 from .repositories import (
+    AcknowledgementRepository,
     BlacklistRepository,
     BounceRepository,
     DmarcRepository,
     DnsRepository,
+    DomainConfigRepository,
     IngestionRunRepository,
+    MailboxConfigRepository,
 )
 
 __all__ = [
@@ -23,4 +26,7 @@ __all__ = [
     "BounceRepository",
     "BlacklistRepository",
     "IngestionRunRepository",
+    "DomainConfigRepository",
+    "MailboxConfigRepository",
+    "AcknowledgementRepository",
 ]

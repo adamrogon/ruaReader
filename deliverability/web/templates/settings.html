@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block title %}{{ t('settings.title') }} · Linkhouse{% endblock %}
+
+{% macro domain_form(item=None, form_id='') %}
+  {# One form shape for both add and edit; a hidden id switches the server between them. #}
+  <form method="post" action="/settings/domains?lang={{ lang }}" class="cfg-form" id="{{ form_id }}">
+    {% if item %}<input type="hidden" name="domain_id" value="{{ item.id }}">{% endif %}
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">{{ t('field.domain') }} *</span>
+        <input type="text" name="name" required value="{{ item.name if item else '' }}"
+               placeholder="example.com" autocomplete="off">
+      </label>
+      <label class="field">
+        <span class="field-label">{{ t('field.dkim_selectors') }}</span>
+        <input type="text" name="dkim_selectors" autocomplete="off"
+               value="{{ (item.dkim_selectors or []) | join(', ') if item else '' }}"
+               placeholder="google, selector1">
+        <span class="field-hint">{{ t('field.dkim_hint') }}</span>
+      </label>
+      <label class="field field-wide">
+        <span class="field-label">{{ t('field.notes') }}</span>
+        <input type="text" name="notes" value="{{ item.notes if item else '' }}" autocomplete="off">
+      </label>
+      <label class="field-check">
+        <input type="checkbox" name="enabled" {{ 'checked' if (item.enabled if item else True) }}>
+        <span>{{ t('field.enabled') }}</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-ghost js-test-domain">{{ t('btn.test_domain') }}</button>
+      <span class="test-result"></span>
+      <span class="form-spacer"></span>
+      {% if item %}<button type="button" class="btn btn-ghost js-cancel">{{ t('btn.cancel') }}</button>{% endif %}
+      <button type="submit" class="btn btn-primary">{{ t('btn.save') }}</button>
+    </div>
+  </form>
+{% endmacro %}
+
+{% macro mailbox_form(kind, item=None, form_id='') %}
+  <form method="post" action="/settings/mailboxes?lang={{ lang }}" class="cfg-form" id="{{ form_id }}">
+    {% if item %}<input type="hidden" name="mailbox_id" value="{{ item.id }}">{% endif %}
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">{{ t('field.name') }} *</span>
+        <input type="text" name="name" required value="{{ item.name if item else '' }}" autocomplete="off">
+        <span class="field-hint">{{ t('field.name_hint') }}</span>
+      </label>
+      {% if kind == 'bounce' %}
+        <label class="field">
+          <span class="field-label">{{ t('field.sending_domain') }} *</span>
+          <input type="text" name="domain" required value="{{ item.domain if item else '' }}"
+                 placeholder="example.com" autocomplete="off">
+        </label>
+      {% endif %}
+      <label class="field">
+        <span class="field-label">{{ t('field.host') }} *</span>
+        <input type="text" name="host" required value="{{ item.host if item else '' }}"
+               placeholder="imap.gmail.com" autocomplete="off">
+      </label>
+      <label class="field field-narrow">
+        <span class="field-label">{{ t('field.port') }}</span>
+        <input type="number" name="port" value="{{ item.port if item else 993 }}" min="1" max="65535">
+      </label>
+      <label class="field">
+        <span class="field-label">{{ t('field.username') }} *</span>
+        <input type="text" name="username" required value="{{ item.username if item else '' }}"
+               placeholder="dmarc@example.com" autocomplete="off">
+      </label>
+      <label class="field">
+        <span class="field-label">{{ t('field.password') }}{{ '' if item else ' *' }}</span>
+        {# autocomplete=new-password stops the browser filling an unrelated saved login. #}
+        <input type="password" name="password" autocomplete="new-password"
+               placeholder="{{ '••••••••' if item and item.password_encrypted else '' }}">
+        <span class="field-hint">
+          {{ t('field.password_hint_edit') if item else t('field.password_hint_new') }}
+        </span>
+      </label>
+      <label class="field">
+        <span class="field-label">{{ t('field.folder') }}</span>
+        <input type="text" name="folder" value="{{ item.folder if item else 'INBOX' }}" autocomplete="off">
+      </label>
+      <label class="field">
+        <span class="field-label">{{ t('field.processed_folder') }}</span>
+        <input type="text" name="processed_folder" autocomplete="off"
+               value="{{ item.processed_folder or '' if item else '' }}">
+        <span class="field-hint">{{ t('field.processed_hint') }}</span>
+      </label>
+      <label class="field-check">
+        <input type="checkbox" name="ssl" {{ 'checked' if (item.ssl if item else True) }}>
+        <span>{{ t('field.ssl') }}</span>
+      </label>
+      <label class="field-check">
+        <input type="checkbox" name="enabled" {{ 'checked' if (item.enabled if item else True) }}>
+        <span>{{ t('field.enabled') }}</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-ghost js-test-mailbox"
+              data-mailbox-id="{{ item.id if item else '' }}">{{ t('btn.test') }}</button>
+      <span class="test-result"></span>
+      <span class="form-spacer"></span>
+      {% if item %}<button type="button" class="btn btn-ghost js-cancel">{{ t('btn.cancel') }}</button>{% endif %}
+      <button type="submit" class="btn btn-primary">{{ t('btn.save') }}</button>
+    </div>
+  </form>
+{% endmacro %}
+
+{% macro mailbox_rows(kind, items) %}
+  {% for item in items %}
+    <div class="cfg-row {{ 'is-off' if not item.enabled }}">
+      <div class="cfg-main">
+        <div class="cfg-name">
+          {{ item.name }}
+          {% if not item.enabled %}<span class="badge neutral">{{ t('status.disabled') }}</span>{% endif %}
+          {% if item.last_test_ok %}<span class="badge ok">{{ t('status.test_ok') }}</span>
+          {% elif item.last_test_ok is false %}<span class="badge critical">{{ t('status.test_failed') }}</span>
+          {% else %}<span class="badge neutral">{{ t('status.never_tested') }}</span>{% endif %}
+          {% if not item.password_encrypted and item.password_env %}
+            <span class="badge info">{{ t('status.password_from_env') }}</span>
+          {% elif not item.password_encrypted %}
+            <span class="badge warning">{{ t('status.no_password') }}</span>
+          {% endif %}
+        </div>
+        <div class="cfg-meta">
+          {{ item.username }} · {{ item.host }}:{{ item.port }}{{ ' · SSL' if item.ssl }} · {{ item.folder }}
+          {% if kind == 'bounce' and item.domain %} · {{ item.domain }}{% endif %}
+        </div>
+        {% if item.last_test_ok is false and item.last_test_error %}
+          <div class="cfg-error">{{ item.last_test_error }}</div>
+        {% endif %}
+      </div>
+      <div class="cfg-actions">
+        <button type="button" class="btn btn-ghost js-edit" data-target="mb-edit-{{ item.id }}">{{ t('btn.edit') }}</button>
+        <form method="post" action="/settings/mailboxes/{{ item.id }}/delete?lang={{ lang }}"
+              onsubmit="return confirm({{ t('confirm.delete_mailbox') | tojson }})">
+          <button type="submit" class="btn btn-danger">{{ t('btn.delete') }}</button>
+        </form>
+      </div>
+    </div>
+    <div class="cfg-edit" id="mb-edit-{{ item.id }}" hidden>
+      {{ mailbox_form(kind, item, 'mbform-' ~ item.id) }}
+    </div>
+  {% else %}
+    <div class="empty">{{ t('settings.no_mailboxes') }}</div>
+  {% endfor %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('settings.title') }}</h1>
+    <p>{{ t('settings.subtitle') }}</p>
+  </div>
+  <a class="back-link" href="/?lang={{ lang }}">{{ t('domain.back') }}</a>
+</div>
+
+{% set notices = {
+  'domain_saved': t('saved.domain'),
+  'domain_deleted': t('deleted.domain'),
+  'mailbox_saved': t('saved.mailbox'),
+  'mailbox_deleted': t('deleted.mailbox')
+} %}
+{% set errors = {
+  'required': t('error.required'),
+  'domain_exists': t('error.domain_exists'),
+  'mailbox_exists': t('error.mailbox_exists'),
+  'no_secret_key': t('error.no_secret_key')
+} %}
+
+{% if notice and notice in notices %}
+  <div class="banner banner-ok">{{ notices[notice] }}</div>
+{% endif %}
+{% if error and error in errors %}
+  <div class="banner banner-error">{{ errors[error] }}</div>
+{% endif %}
+{% if not secret_key_ok %}
+  <div class="banner banner-warning">{{ t('error.no_secret_key') }}</div>
+{% endif %}
+
+{# --- Domains ------------------------------------------------------------- #}
+<h2>{{ t('settings.domains') }} <span class="hint">{{ t('settings.domains_hint') }}</span></h2>
+
+<div class="cfg-list">
+  {% for item in domains %}
+    <div class="cfg-row {{ 'is-off' if not item.enabled }}">
+      <div class="cfg-main">
+        <div class="cfg-name">
+          {{ item.name }}
+          {% if not item.enabled %}<span class="badge neutral">{{ t('status.disabled') }}</span>{% endif %}
+        </div>
+        <div class="cfg-meta">
+          {% if item.dkim_selectors %}DKIM: {{ item.dkim_selectors | join(', ') }}{% else %}DKIM: —{% endif %}
+          {% if item.notes %} · {{ item.notes }}{% endif %}
+        </div>
+      </div>
+      <div class="cfg-actions">
+        <button type="button" class="btn btn-ghost js-edit" data-target="dom-edit-{{ item.id }}">{{ t('btn.edit') }}</button>
+        <form method="post" action="/settings/domains/{{ item.id }}/delete?lang={{ lang }}"
+              onsubmit="return confirm({{ t('confirm.delete_domain') | tojson }})">
+          <button type="submit" class="btn btn-danger">{{ t('btn.delete') }}</button>
+        </form>
+      </div>
+    </div>
+    <div class="cfg-edit" id="dom-edit-{{ item.id }}" hidden>
+      {{ domain_form(item, 'domform-' ~ item.id) }}
+    </div>
+  {% else %}
+    <div class="empty">{{ t('settings.no_domains') }}</div>
+  {% endfor %}
+</div>
+
+<button type="button" class="btn btn-add js-edit" data-target="dom-add">+ {{ t('settings.add_domain') }}</button>
+<div class="cfg-edit" id="dom-add" hidden>{{ domain_form(none, 'domform-new') }}</div>
+
+{# --- Rua mailboxes -------------------------------------------------------- #}
+<h2>{{ t('settings.mailboxes_rua') }} <span class="hint">{{ t('settings.mailboxes_rua_hint') }}</span></h2>
+<div class="cfg-list">{{ mailbox_rows('rua', rua_mailboxes) }}</div>
+<button type="button" class="btn btn-add js-edit" data-target="rua-add">+ {{ t('settings.add_mailbox') }}</button>
+<div class="cfg-edit" id="rua-add" hidden>{{ mailbox_form('rua', none, 'mbform-new-rua') }}</div>
+
+{# --- Bounce mailboxes ----------------------------------------------------- #}
+<h2>{{ t('settings.mailboxes_bounce') }} <span class="hint">{{ t('settings.mailboxes_bounce_hint') }}</span></h2>
+<div class="cfg-list">{{ mailbox_rows('bounce', bounce_mailboxes) }}</div>
+<button type="button" class="btn btn-add js-edit" data-target="bounce-add">+ {{ t('settings.add_mailbox') }}</button>
+<div class="cfg-edit" id="bounce-add" hidden>{{ mailbox_form('bounce', none, 'mbform-new-bounce') }}</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const LANG = {{ lang | tojson }};
+const T_TESTING = {{ t('btn.testing') | tojson }};
+const T_HTTP_ERROR = {{ t('test.http_error', status='{status}') | tojson }};
+
+// A non-200 must still produce a readable message — otherwise a server-side
+// failure shows up as an empty red space and looks like nothing happened.
+async function postTest(url, body) {
+  const res = await fetch(url, { method: 'POST', body });
+  if (!res.ok) {
+    return { ok: false, message: T_HTTP_ERROR.replace('{status}', res.status) };
+  }
+  return res.json();
+}
+
+// Show/hide the inline add and edit forms.
+document.querySelectorAll('.js-edit').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const el = document.getElementById(btn.dataset.target);
+    if (el) el.hidden = !el.hidden;
+  });
+});
+document.querySelectorAll('.js-cancel').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const wrap = btn.closest('.cfg-edit');
+    if (wrap) wrap.hidden = true;
+  });
+});
+
+function showResult(el, ok, message, warning) {
+  el.textContent = message;
+  el.className = 'test-result ' + (ok ? (warning ? 'is-warning' : 'is-ok') : 'is-error');
+}
+
+// Test IMAP credentials straight from the form, before saving.
+document.querySelectorAll('.js-test-mailbox').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const form = btn.closest('form');
+    const out = form.querySelector('.test-result');
+    const body = new FormData();
+    ['host', 'port', 'username', 'password', 'folder'].forEach(f => {
+      const input = form.querySelector(`[name="${f}"]`);
+      if (input) body.append(f, input.value);
+    });
+    const sslInput = form.querySelector('[name="ssl"]');
+    if (sslInput && sslInput.checked) body.append('ssl', 'on');
+    if (btn.dataset.mailboxId) body.append('mailbox_id', btn.dataset.mailboxId);
+
+    const original = btn.textContent;
+    btn.textContent = T_TESTING;
+    btn.disabled = true;
+    try {
+      const data = await postTest(`/api/test/mailbox?lang=${LANG}`, body);
+      showResult(out, data.ok, data.message, false);
+    } catch (err) {
+      showResult(out, false, String(err), false);
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+});
+
+// Check a domain's DNS before adding it.
+document.querySelectorAll('.js-test-domain').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const form = btn.closest('form');
+    const out = form.querySelector('.test-result');
+    const body = new FormData();
+    body.append('name', form.querySelector('[name="name"]').value);
+    body.append('dkim_selectors', form.querySelector('[name="dkim_selectors"]').value);
+
+    const original = btn.textContent;
+    btn.textContent = T_TESTING;
+    btn.disabled = true;
+    try {
+      const data = await postTest(`/api/test/domain?lang=${LANG}`, body);
+      showResult(out, data.ok, data.message, data.warning);
+    } catch (err) {
+      showResult(out, false, String(err), false);
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+});
+</script>
+{% endblock %}

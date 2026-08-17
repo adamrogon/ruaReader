@@ -215,6 +215,87 @@ ingestion_runs = Table(
 )
 
 
+# --- Configuration held in the database --------------------------------------
+#
+# Domains and mailboxes started life in config/*.yml. They moved here so they
+# can be managed from the dashboard; the YAML files are still read once, to
+# seed these tables on first run, and remain a valid way to bootstrap.
+
+domains = Table(
+    "domains",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("name", String(255), nullable=False),
+    # DKIM selectors cannot be discovered from DNS, so they are configured
+    # explicitly. An empty list means "do not check DKIM for this domain".
+    Column("dkim_selectors", JSON),
+    Column("notes", Text),
+    Column("enabled", Boolean, nullable=False, default=True),
+    Column("created_at", DateTime, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
+    UniqueConstraint("project_id", "name", name="uq_domain_name"),
+)
+
+
+mailboxes = Table(
+    "mailboxes",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("name", String(128), nullable=False),
+    # 'rua'    — receives DMARC aggregate reports (Module 1)
+    # 'bounce' — a sending mailbox that receives NDRs (Module 3)
+    Column("kind", String(16), nullable=False, index=True),
+    Column("host", String(255), nullable=False),
+    Column("port", Integer, nullable=False, default=993),
+    Column("ssl", Boolean, nullable=False, default=True),
+    Column("username", String(255), nullable=False),
+    # Fernet ciphertext — see deliverability/secrets.py. The key lives in .env,
+    # never here, so this column on its own does not disclose the password.
+    Column("password_encrypted", Text),
+    # Legacy path: mailboxes seeded from YAML may still name an env var
+    # instead of carrying an encrypted password.
+    Column("password_env", String(128)),
+    Column("folder", String(255), nullable=False, default="INBOX"),
+    Column("processed_folder", String(255)),
+    # Only meaningful for kind='bounce': which sending domain the NDRs belong to.
+    Column("domain", String(255)),
+    Column("enabled", Boolean, nullable=False, default=True),
+    # Result of the last "test connection" run, shown next to the mailbox.
+    Column("last_test_at", DateTime),
+    Column("last_test_ok", Boolean),
+    Column("last_test_error", Text),
+    Column("created_at", DateTime, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
+    UniqueConstraint("project_id", "name", name="uq_mailbox_name"),
+)
+
+
+flag_acknowledgements = Table(
+    "flag_acknowledgements",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("domain", String(255), nullable=False, index=True),
+    # Stable identity of a problem: domain + source + message type + provider.
+    # Deliberately excludes counts, so "4 rejections" and "5 rejections" are
+    # the same flag — but see evidence_at for how new occurrences reopen it.
+    Column("fingerprint", String(64), nullable=False),
+    Column("note", Text),
+    Column("acknowledged_at", DateTime, nullable=False),
+    # Timestamp of the newest underlying evidence at the moment of
+    # acknowledgement. If fresher evidence arrives later, the acknowledgement
+    # no longer applies and the flag comes back — acknowledging a block must
+    # not hide the next one.
+    Column("evidence_at", DateTime),
+    # Optional snooze. Null means "until the problem resolves itself".
+    Column("expires_at", DateTime),
+    UniqueConstraint("project_id", "domain", "fingerprint", name="uq_flag_ack"),
+    Index("ix_flag_acks_domain", "domain", "fingerprint"),
+)
+
+
 ALL_TABLES = (
     dmarc_reports,
     dmarc_records,
@@ -222,4 +303,7 @@ ALL_TABLES = (
     bounces,
     blacklist_checks,
     ingestion_runs,
+    domains,
+    mailboxes,
+    flag_acknowledgements,
 )

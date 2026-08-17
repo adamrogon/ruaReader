@@ -20,7 +20,7 @@ import sys
 from typing import Any, Dict
 
 from .config import Settings
-from .health import domain_statuses, ingestion_health
+from .health import domain_statuses, ingestion_health, localize_ingestion_health
 from .storage import get_database
 
 
@@ -100,17 +100,37 @@ def cmd_status(args: argparse.Namespace) -> int:
     """Print the same picture the dashboard shows, without starting a server."""
     settings = Settings.from_env()
     database = get_database(settings)
+    lang = getattr(args, "lang", "en")
 
     print("Ingestion freshness")
-    for row in ingestion_health(database, settings):
+    for row in localize_ingestion_health(ingestion_health(database, settings), lang):
         marker = "ok " if row["state"] == "ok" else "!! "
-        print(f"  {marker}{row['label']:<18} {row['state']:<10} {row['message']}")
+        print(f"  {marker}{row['label']:<20} {row['state']:<10} {row['message']}")
 
     print(f"\nDomains by urgency (last {args.days} days)")
     for status in domain_statuses(settings, database, window_days=args.days):
-        metrics = status.metrics
+        view = status.localize(lang)
+        metrics = view["metrics"]
         rate = f"{metrics['compliance']:.0%}" if metrics["compliance"] is not None else "n/a"
-        print(f"  [{status.severity:<8}] {status.domain:<24} compliance={rate:<5} {status.headline}")
+        handled = f" (+{view['acknowledged_count']} handled)" if view["acknowledged_count"] else ""
+        print(
+            f"  [{view['severity']:<8}] {view['domain']:<24} "
+            f"compliance={rate:<5} {view['headline']}{handled}"
+        )
+    return 0
+
+
+def cmd_genkey(args: argparse.Namespace) -> int:
+    """Print a fresh encryption key for mailbox passwords."""
+    from .secrets import SECRET_KEY_ENV, generate_key
+
+    key = generate_key()
+    print(f"{SECRET_KEY_ENV}={key}")
+    print(
+        "\nAdd the line above to your .env file. Keep it stable — changing it makes\n"
+        "every stored mailbox password unreadable and they have to be re-entered.",
+        file=sys.stderr,
+    )
     return 0
 
 
@@ -147,7 +167,11 @@ def main(argv=None) -> int:
 
     status_parser = sub.add_parser("status", help="Print current state without network access.")
     status_parser.add_argument("--days", type=int, default=7)
+    status_parser.add_argument("--lang", default="en", choices=["pl", "en"])
     status_parser.set_defaults(func=cmd_status)
+
+    genkey_parser = sub.add_parser("genkey", help="Generate the SECRET_KEY used to encrypt mailbox passwords.")
+    genkey_parser.set_defaults(func=cmd_genkey)
 
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)

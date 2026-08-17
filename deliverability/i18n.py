@@ -502,6 +502,202 @@ MESSAGES: dict = {
         "en": "SPF ends in '+all', which authorises the entire internet to send as this domain.",
     },
     "dns.error.resolver": {"pl": "Zapytanie DNS nie powiodło się: {error}", "en": "DNS lookup failed: {error}"},
+
+    # --- Settings screen ------------------------------------------------------
+    "settings.title": {"pl": "Ustawienia", "en": "Settings"},
+    "settings.subtitle": {
+        "pl": "Domeny i skrzynki, z których narzędzie zbiera dane.",
+        "en": "The domains and mailboxes this tool collects data from.",
+    },
+    "settings.domains": {"pl": "Monitorowane domeny", "en": "Monitored domains"},
+    "settings.domains_hint": {
+        "pl": "selektory DKIM trzeba podać ręcznie — nie da się ich odczytać z DNS",
+        "en": "DKIM selectors must be entered by hand — they cannot be read from DNS",
+    },
+    "settings.mailboxes_rua": {"pl": "Skrzynki z raportami DMARC", "en": "DMARC report mailboxes"},
+    "settings.mailboxes_rua_hint": {
+        "pl": "tu przychodzą raporty rua; może być kilka skrzynek",
+        "en": "where rua reports arrive; there can be several",
+    },
+    "settings.mailboxes_bounce": {"pl": "Skrzynki nadawcze (odbicia)", "en": "Sending mailboxes (bounces)"},
+    "settings.mailboxes_bounce_hint": {
+        "pl": "NDR wraca zawsze na skrzynkę, z której wyszedł mail — jedna pozycja na skrzynkę",
+        "en": "an NDR always returns to the mailbox that sent the message — one entry per mailbox",
+    },
+    "settings.add_domain": {"pl": "Dodaj domenę", "en": "Add domain"},
+    "settings.add_mailbox": {"pl": "Dodaj skrzynkę", "en": "Add mailbox"},
+    "settings.no_domains": {"pl": "Nie dodano jeszcze żadnej domeny.", "en": "No domains added yet."},
+    "settings.no_mailboxes": {"pl": "Nie dodano jeszcze żadnej skrzynki.", "en": "No mailboxes added yet."},
+
+    "field.domain": {"pl": "Domena", "en": "Domain"},
+    "field.dkim_selectors": {"pl": "Selektory DKIM", "en": "DKIM selectors"},
+    "field.dkim_hint": {"pl": "po przecinku, np. google, selector1", "en": "comma separated, e.g. google, selector1"},
+    "field.notes": {"pl": "Notatki", "en": "Notes"},
+    "field.name": {"pl": "Nazwa", "en": "Name"},
+    "field.name_hint": {"pl": "dowolna etykieta, np. rua-glowna", "en": "any label, e.g. rua-main"},
+    "field.host": {"pl": "Serwer IMAP", "en": "IMAP host"},
+    "field.port": {"pl": "Port", "en": "Port"},
+    "field.ssl": {"pl": "SSL/TLS", "en": "SSL/TLS"},
+    "field.username": {"pl": "Użytkownik", "en": "Username"},
+    "field.password": {"pl": "Hasło", "en": "Password"},
+    "field.password_hint_new": {
+        "pl": "zapisywane zaszyfrowane; użyj hasła aplikacji, nie głównego hasła do konta",
+        "en": "stored encrypted; use an app password, not your main account password",
+    },
+    "field.password_hint_edit": {
+        "pl": "zostaw puste, żeby nie zmieniać zapisanego hasła",
+        "en": "leave blank to keep the saved password",
+    },
+    "field.folder": {"pl": "Folder", "en": "Folder"},
+    "field.processed_folder": {"pl": "Folder na przetworzone", "en": "Processed folder"},
+    "field.processed_hint": {"pl": "opcjonalnie", "en": "optional"},
+    "field.sending_domain": {"pl": "Domena nadawcza", "en": "Sending domain"},
+    "field.enabled": {"pl": "Aktywna", "en": "Enabled"},
+
+    "btn.save": {"pl": "Zapisz", "en": "Save"},
+    "btn.cancel": {"pl": "Anuluj", "en": "Cancel"},
+    "btn.edit": {"pl": "Edytuj", "en": "Edit"},
+    "btn.delete": {"pl": "Usuń", "en": "Delete"},
+    "btn.test": {"pl": "Testuj połączenie", "en": "Test connection"},
+    "btn.test_domain": {"pl": "Sprawdź DNS", "en": "Check DNS"},
+    "btn.testing": {"pl": "Sprawdzam…", "en": "Testing…"},
+    "btn.close": {"pl": "Zamknij", "en": "Close"},
+
+    "confirm.delete_domain": {
+        "pl": "Usunąć tę domenę z monitoringu? Zebrane dane historyczne zostaną w bazie.",
+        "en": "Remove this domain from monitoring? Collected history stays in the database.",
+    },
+    "confirm.delete_mailbox": {
+        "pl": "Usunąć tę skrzynkę? Zapisane hasło zostanie skasowane.",
+        "en": "Remove this mailbox? The stored password will be deleted.",
+    },
+
+    "status.disabled": {"pl": "wyłączona", "en": "disabled"},
+    "status.never_tested": {"pl": "nietestowana", "en": "never tested"},
+    "status.test_ok": {"pl": "połączenie OK", "en": "connection OK"},
+    "status.test_failed": {"pl": "błąd połączenia", "en": "connection failed"},
+    "status.no_password": {"pl": "brak hasła", "en": "no password"},
+    "status.password_from_env": {"pl": "hasło z .env", "en": "password from .env"},
+
+    # --- Connection / domain test results -------------------------------------
+    "test.ok": {
+        "pl": "Połączono. Folder {folder} zawiera {count} wiadomości.",
+        "en": "Connected. Folder {folder} holds {count} messages.",
+    },
+    "test.login_failed": {
+        "pl": "Serwer odrzucił login lub hasło. Jeśli konto ma dwuskładnikowe logowanie, "
+        "potrzebne jest hasło aplikacji, nie zwykłe hasło. ({error})",
+        "en": "The server rejected the username or password. If the account has two-factor "
+        "authentication, you need an app password rather than the account password. ({error})",
+    },
+    "test.host_unknown": {
+        "pl": "Nie udało się rozwiązać adresu {host}. Sprawdź, czy nazwa serwera jest poprawna.",
+        "en": "Could not resolve {host}. Check the server name.",
+    },
+    "test.timeout": {
+        "pl": "Przekroczono czas oczekiwania na {host}:{port}. Serwer nie odpowiada albo port jest zablokowany.",
+        "en": "Timed out connecting to {host}:{port}. The server is not responding or the port is blocked.",
+    },
+    "test.ssl_error": {
+        "pl": "Błąd SSL/TLS: {error}. Sprawdź, czy port i ustawienie SSL do siebie pasują "
+        "(zwykle 993 z SSL, 143 bez).",
+        "en": "SSL/TLS error: {error}. Check that the port and the SSL setting match "
+        "(usually 993 with SSL, 143 without).",
+    },
+    "test.connection_failed": {
+        "pl": "Nie udało się połączyć z {host}:{port} ({error}).",
+        "en": "Could not connect to {host}:{port} ({error}).",
+    },
+    "test.imap_error": {"pl": "Serwer IMAP zwrócił błąd: {error}", "en": "The IMAP server returned an error: {error}"},
+    "test.unexpected": {"pl": "Nieoczekiwany błąd: {error}", "en": "Unexpected error: {error}"},
+    "test.fields_missing": {
+        "pl": "Najpierw wypełnij wymagane pola, potem uruchom test.",
+        "en": "Fill in the required fields first, then run the test.",
+    },
+    "test.http_error": {
+        "pl": "Serwer odpowiedział błędem ({status}). Sprawdź logi aplikacji.",
+        "en": "The server returned an error ({status}). Check the application logs.",
+    },
+    "test.no_password": {
+        "pl": "Brak hasła do przetestowania. Wpisz je w formularzu. {error}",
+        "en": "No password to test with. Enter one in the form. {error}",
+    },
+    "test.folder_missing": {
+        "pl": "Zalogowano, ale folder {folder} nie istnieje. Dostępne: {available}",
+        "en": "Logged in, but folder {folder} does not exist. Available: {available}",
+    },
+    "test.domain_ok": {
+        "pl": "{domain} wygląda poprawnie — SPF, DMARC z adresem rua i DKIM ({selectors}) są na miejscu.",
+        "en": "{domain} looks correct — SPF, DMARC with a rua address, and DKIM ({selectors}) are all present.",
+    },
+    "test.domain_gaps": {
+        "pl": "{domain} istnieje, ale brakuje: {gaps}. Można ją dodać — narzędzie właśnie po to jest, "
+        "żeby takie braki pokazywać.",
+        "en": "{domain} exists but is missing: {gaps}. You can still add it — surfacing gaps like "
+        "these is what the tool is for.",
+    },
+    "test.domain_nxdomain": {
+        "pl": "Domena {domain} nie istnieje w DNS. Sprawdź pisownię.",
+        "en": "Domain {domain} does not exist in DNS. Check the spelling.",
+    },
+    "test.domain_malformed": {
+        "pl": "{domain} nie wygląda na poprawną nazwę domeny.",
+        "en": "{domain} does not look like a valid domain name.",
+    },
+    "test.domain_dns_error": {
+        "pl": "Nie udało się sprawdzić {domain}: {error}",
+        "en": "Could not check {domain}: {error}",
+    },
+
+    # --- Saving / errors ------------------------------------------------------
+    # Redirect-carried notices name no specific record — the redirect only
+    # carries a short code, and the saved row is already visible in the list.
+    "saved.domain": {"pl": "Zapisano domenę.", "en": "Domain saved."},
+    "saved.mailbox": {"pl": "Zapisano skrzynkę.", "en": "Mailbox saved."},
+    "deleted.domain": {"pl": "Usunięto domenę.", "en": "Domain removed."},
+    "deleted.mailbox": {"pl": "Usunięto skrzynkę.", "en": "Mailbox removed."},
+    "error.domain_exists": {
+        "pl": "Ta domena jest już na liście.",
+        "en": "That domain is already on the list.",
+    },
+    "error.mailbox_exists": {
+        "pl": "Skrzynka o tej nazwie już istnieje. Użyj innej nazwy.",
+        "en": "A mailbox with that name already exists. Use a different name.",
+    },
+    "error.required": {"pl": "Wypełnij wymagane pola.", "en": "Fill in the required fields."},
+    "error.no_secret_key": {
+        "pl": "Nie ustawiono SECRET_KEY w .env, więc nie da się zapisać hasła. "
+        "Wygeneruj klucz: python -m deliverability.cli genkey",
+        "en": "SECRET_KEY is not set in .env, so passwords cannot be stored. "
+        "Generate one with: python -m deliverability.cli genkey",
+    },
+
+    # --- Run now --------------------------------------------------------------
+    "action.refresh": {"pl": "Sprawdź teraz", "en": "Check now"},
+    "action.refresh_all": {"pl": "Sprawdź wszystko", "en": "Check everything"},
+    "action.running": {"pl": "W trakcie…", "en": "Running…"},
+    "action.started": {"pl": "Uruchomiono sprawdzanie ({stream}).", "en": "Started {stream} check."},
+    "action.already_running": {
+        "pl": "Sprawdzanie {stream} już trwa.",
+        "en": "A {stream} check is already running.",
+    },
+
+    # --- Acknowledgement ------------------------------------------------------
+    "ack.button": {"pl": "Oznacz jako obsłużone", "en": "Mark as handled"},
+    "ack.undo": {"pl": "Cofnij", "en": "Undo"},
+    "ack.marked": {"pl": "Obsłużone", "en": "Handled"},
+    "ack.marked_at": {"pl": "oznaczone {when}", "en": "marked {when}"},
+    "ack.note_placeholder": {
+        "pl": "notatka opcjonalnie, np. czekam na delisting",
+        "en": "optional note, e.g. waiting for delisting",
+    },
+    "ack.explainer": {
+        "pl": "Obsłużone flagi nie podbijają domeny na górę listy, ale zostają widoczne. "
+        "Jeśli problem wystąpi ponownie, oznaczenie samo się cofnie.",
+        "en": "Handled flags stop pushing a domain up the list but stay visible. "
+        "If the problem happens again, the mark clears itself.",
+    },
+    "ack.section": {"pl": "Obsłużone", "en": "Handled"},
 }
 
 

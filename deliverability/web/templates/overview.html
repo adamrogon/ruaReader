@@ -7,10 +7,16 @@
     <h1>{{ t('overview.title') }}</h1>
     <p>{{ t('overview.subtitle', days=days) }}</p>
   </div>
-  <div class="range-picker">
-    {% for option in [1, 7, 14, 30] %}
-      <a href="/?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
-    {% endfor %}
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div class="run-now">
+      <button type="button" class="btn" id="run-all">{{ t('action.refresh_all') }}</button>
+      <span class="run-msg" id="run-msg"></span>
+    </div>
+    <div class="range-picker">
+      {% for option in [1, 7, 14, 30] %}
+        <a href="/?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+      {% endfor %}
+    </div>
   </div>
 </div>
 
@@ -190,6 +196,43 @@
 {% block scripts %}
 <script>
 const DAYS = {{ days }};
+const LANG = {{ lang | tojson }};
+const T_RUNNING = {{ t('action.running') | tojson }};
+
+// "Check everything": fire each stream, then poll until none are in flight and
+// reload so the page shows the freshly ingested data.
+(function () {
+  const btn = document.getElementById('run-all');
+  const msg = document.getElementById('run-msg');
+  if (!btn) return;
+
+  async function poll() {
+    const res = await fetch('/api/run/status');
+    const data = await res.json();
+    if (data.running && data.running.length) {
+      msg.textContent = `${T_RUNNING} (${data.running.join(', ')})`;
+      setTimeout(poll, 1500);
+    } else {
+      window.location.reload();
+    }
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.classList.add('is-running');
+    msg.innerHTML = '<span class="spin"></span> ' + T_RUNNING;
+    // Bounces are the time-sensitive stream, so they go first.
+    for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
+      try {
+        await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });
+      } catch (err) {
+        /* keep going — one failing stream should not stop the rest */
+      }
+    }
+    setTimeout(poll, 1200);
+  });
+})();
+
 const L = {
   passed: {{ t('chart.legend.passed') | tojson }},
   forwarded: {{ t('chart.legend.forwarded') | tojson }},

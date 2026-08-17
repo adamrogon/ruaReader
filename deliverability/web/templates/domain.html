@@ -54,15 +54,46 @@
 {# --- What is wrong, in words -------------------------------------------- #}
 {% if status.flags %}
   <h2>{{ t('section.attention') }} <span class="hint">{{ t('section.attention_hint') }}</span></h2>
+  <p class="ack-explainer">{{ t('ack.explainer') }}</p>
   <div class="flags">
     {% for flag in status.flags %}
-      <div class="flag {{ flag.severity }}">
+      <div class="flag {{ flag.severity }} {{ 'is-acked' if flag.acknowledged }}">
         <div class="flag-head">
           <span class="flag-title">{{ flag.title }}</span>
-          <span class="badge {{ flag.severity }}">{{ t('severity.' ~ flag.severity) }}</span>
+          {% if flag.acknowledged %}
+            <span class="badge neutral">{{ t('ack.marked') }}</span>
+          {% else %}
+            <span class="badge {{ flag.severity }}">{{ t('severity.' ~ flag.severity) }}</span>
+          {% endif %}
           <span class="flag-src">{{ flag.source }}{% if flag.esp %} · {{ flag.esp }}{% endif %}</span>
         </div>
         <div class="flag-msg">{{ flag.message }}</div>
+
+        {# Only flags that actually push a domain up the list are worth
+           acknowledging; info-level ones carry no weight anyway. #}
+        {% if flag.severity in ('critical', 'warning') %}
+          <div class="flag-ack-bar">
+            {% if flag.acknowledged %}
+              {% if flag.ack_note %}<span class="flag-ack-note">„{{ flag.ack_note }}”</span>{% endif %}
+              {% if flag.ack_at %}
+                <span class="flag-src">{{ t('ack.marked_at', when=flag.ack_at.strftime('%Y-%m-%d %H:%M')) }}</span>
+              {% endif %}
+              <span class="form-spacer"></span>
+              <button type="button" class="btn btn-ghost btn-sm js-unack"
+                      data-domain="{{ domain }}" data-fingerprint="{{ flag.fingerprint }}">
+                {{ t('ack.undo') }}
+              </button>
+            {% else %}
+              <input type="text" class="js-ack-note" placeholder="{{ t('ack.note_placeholder') }}">
+              <button type="button" class="btn btn-ghost btn-sm js-ack"
+                      data-domain="{{ domain }}"
+                      data-fingerprint="{{ flag.fingerprint }}"
+                      data-evidence="{{ flag.evidence_at.isoformat() if flag.evidence_at else '' }}">
+                {{ t('ack.button') }}
+              </button>
+            {% endif %}
+          </div>
+        {% endif %}
       </div>
     {% endfor %}
   </div>
@@ -256,6 +287,36 @@
 <script>
 const DAYS = {{ days }};
 const DOMAIN = {{ domain | tojson }};
+
+// Acknowledge / un-acknowledge a flag, then reload so urgency and ordering
+// are recomputed server-side rather than guessed at in the browser.
+async function postForm(url, fields) {
+  const body = new FormData();
+  Object.entries(fields).forEach(([k, v]) => body.append(k, v));
+  const res = await fetch(url, { method: 'POST', body });
+  if (res.ok) window.location.reload();
+}
+
+document.querySelectorAll('.js-ack').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const note = btn.closest('.flag-ack-bar').querySelector('.js-ack-note');
+    btn.disabled = true;
+    postForm(`/api/flags/${encodeURIComponent(btn.dataset.domain)}/ack`, {
+      fingerprint: btn.dataset.fingerprint,
+      note: note ? note.value : '',
+      evidence_at: btn.dataset.evidence || '',
+    });
+  });
+});
+
+document.querySelectorAll('.js-unack').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    postForm(`/api/flags/${encodeURIComponent(btn.dataset.domain)}/unack`, {
+      fingerprint: btn.dataset.fingerprint,
+    });
+  });
+});
 const L = {
   passed: {{ t('chart.legend.passed') | tojson }},
   forwarded: {{ t('chart.legend.forwarded') | tojson }},

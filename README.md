@@ -36,8 +36,14 @@ Open <http://127.0.0.1:8099>. To clear the demo data later, delete `data/`.
 
 ## Configuration
 
-Three files. Credentials live only in `.env`, which is git-ignored from the
-first commit.
+Domains and mailboxes are managed in the dashboard, under **Settings**. Add a
+domain, add a mailbox, press **Test connection** — a wrong password or a
+mistyped host tells you so immediately instead of turning into a stale-data
+warning hours later.
+
+The YAML files below are still read **once**, to seed the database on a fresh
+install, so an existing checkout keeps working and YAML remains a valid way to
+bootstrap. After that, the database is the source of truth.
 
 ### `.env` — secrets and paths
 
@@ -46,15 +52,19 @@ PROJECT_ID=linkhouse
 DATABASE_URL=sqlite:///data/deliverability.db
 ARCHIVE_DIR=data/archive
 RECIPIENT_HASH_SALT=<long random string, keep stable>
+SECRET_KEY=<generate with: python -m deliverability.cli genkey>
 
+# Only needed for mailboxes bootstrapped from YAML — ones added in the
+# dashboard store their password encrypted in the database instead.
 RUA_MAIN_PASSWORD=...
-BOUNCE_DOMAIN1_PASSWORD=...
 ```
 
-`RECIPIENT_HASH_SALT` salts the hashing of bounce recipient addresses. Changing
-it makes previously stored hashes incomparable, so set it once and leave it.
+`RECIPIENT_HASH_SALT` salts the hashing of bounce recipient addresses.
+`SECRET_KEY` encrypts mailbox passwords entered in the dashboard. Both must
+stay stable: changing the salt makes old hashes incomparable, and changing the
+key makes stored passwords unreadable, so they have to be re-entered.
 
-### `config/mailboxes.yml` — the mailboxes to poll
+### `config/mailboxes.yml` — seeding mailboxes (optional)
 
 Two **lists**, so adding a mailbox never means changing code. Passwords are
 referenced by environment-variable name, never written here.
@@ -113,7 +123,10 @@ empty list means "skip the DKIM check"; omitting the key inherits `defaults`.
 .venv/bin/python -m deliverability.cli dnsbl     # blacklist checks
 .venv/bin/python -m deliverability.cli daily     # rua + dns + dnsbl together
 .venv/bin/python -m deliverability.cli status    # current state, no network
+.venv/bin/python -m deliverability.cli genkey    # generate SECRET_KEY
 ```
+
+`status` takes `--lang pl` if you prefer the Polish wording in a terminal.
 
 `status` prints what the dashboard shows without starting a server — useful from
 a terminal or a cron mail.
@@ -149,6 +162,25 @@ highest-volume failing sources.
 
 JSON endpoints, if you want the data elsewhere: `/api/volume`, `/api/bounces`,
 `/api/esp`, `/api/health`.
+
+**Settings** — add, edit, enable/disable, and remove domains and mailboxes.
+Passwords typed here are encrypted with `SECRET_KEY` before they touch the
+database. **Test connection** logs into IMAP and checks the folder exists;
+**Check DNS** confirms a domain resolves and reports which of SPF / DMARC /
+rua / DKIM are missing before you commit to monitoring it.
+
+**Check everything** (top of the overview) runs all four ingestion streams on
+demand, on a background thread, and reloads when they finish. It refuses to
+start a stream that is already running, so it is safe to press twice or to
+press while cron is mid-run.
+
+**Mark as handled** — on a domain page, any critical or warning flag can be
+acknowledged, with an optional note. The flag stays visible but stops counting
+toward urgency, so a domain you are already dealing with drops down the list
+instead of permanently occupying the top. Acknowledgements are pinned to the
+evidence that existed when they were made: if another rejection arrives, or a
+fresh DNS check still fails, the mark clears itself and the flag returns at
+full weight. Acknowledging a problem never hides the *next* one.
 
 **Language and theme.** The dashboard is bilingual (Polish default, English via
 the globe control in the topbar) — every flag, DNS warning, and ingestion

@@ -420,6 +420,12 @@ def check_domain(domain: Domain, resolver: Optional[dns.resolver.Resolver] = Non
     check["mx_error"] = mx_error
 
     check["warnings"] = build_warnings(check, dkim_results)
+
+    # spf_error_details exists only to carry structured errors from check_spf()
+    # into build_warnings(); it has no column and must not reach the insert.
+    # Its content is already preserved twice over — as English text in
+    # spf_error, and as translated warnings in warnings.
+    check.pop("spf_error_details", None)
     return check
 
 

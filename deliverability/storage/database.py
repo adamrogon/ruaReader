@@ -29,7 +29,17 @@ class Database:
             if path and path != ":memory:":
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
 
-        self.engine: Engine = create_engine(url, future=True)
+        connect_args = {}
+        if url.startswith("sqlite"):
+            # Ingestion triggered from the dashboard runs on a worker thread
+            # while the request thread keeps serving pages, so connections
+            # have to be usable across threads.
+            connect_args["check_same_thread"] = False
+            # Wait rather than fail instantly if the single writer lock is
+            # held — an ingestion run and a page load overlapping is normal.
+            connect_args["timeout"] = 30
+
+        self.engine: Engine = create_engine(url, future=True, connect_args=connect_args)
 
         if url.startswith("sqlite"):
             # WAL lets the dashboard read while an ingestion run is writing;

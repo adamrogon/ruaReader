@@ -38,34 +38,58 @@ class Mailbox:
     Used for both rua report mailboxes (Module 1) and bounce mailboxes
     (Module 3). ``domain`` is only meaningful for bounce mailboxes, where it
     ties an NDR back to the sending domain.
+
+    A password comes from one of two places: ``password_encrypted`` for
+    mailboxes added through the dashboard, or ``password_env`` for ones
+    bootstrapped from YAML. Neither is resolved until it is actually needed.
     """
 
     name: str
     host: str
     username: str
-    password_env: str
+    password_env: Optional[str] = None
+    password_encrypted: Optional[str] = None
     port: int = 993
     ssl: bool = True
     folder: str = "INBOX"
     processed_folder: Optional[str] = None
     enabled: bool = True
     domain: Optional[str] = None
+    id: Optional[int] = None
+    kind: str = "rua"
 
     @property
     def password(self) -> str:
-        """Resolve the password from the environment at use time.
+        """Resolve the password at use time.
 
         Deliberately not stored on the instance so a stray repr/log of the
         config object cannot leak it.
         """
-        value = os.environ.get(self.password_env)
-        if not value:
-            raise ConfigError(
-                f"Mailbox {self.name!r} needs environment variable "
-                f"{self.password_env!r}, which is unset or empty. "
-                f"Add it to your .env file."
-            )
-        return value
+        if self.password_encrypted:
+            from .secrets import decrypt
+
+            return decrypt(self.password_encrypted)
+
+        if self.password_env:
+            value = os.environ.get(self.password_env)
+            if not value:
+                raise ConfigError(
+                    f"Mailbox {self.name!r} needs environment variable "
+                    f"{self.password_env!r}, which is unset or empty. "
+                    f"Add it to your .env file."
+                )
+            return value
+
+        raise ConfigError(
+            f"Mailbox {self.name!r} has no password configured. Set one in the "
+            f"dashboard under Settings, or give it a password_env in "
+            f"config/mailboxes.yml."
+        )
+
+    @property
+    def has_password(self) -> bool:
+        """Whether a password is configured at all, without decrypting it."""
+        return bool(self.password_encrypted or (self.password_env and os.environ.get(self.password_env)))
 
 
 @dataclass(frozen=True)
@@ -75,6 +99,8 @@ class Domain:
     name: str
     dkim_selectors: List[str] = field(default_factory=list)
     notes: str = ""
+    enabled: bool = True
+    id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +155,7 @@ def _build_mailbox(entry: Dict[str, Any], source: str) -> Mailbox:
             raise ConfigError(f"Mailbox in {source} is missing required key {required!r}: {entry!r}")
     return Mailbox(
         name=entry["name"],
+        kind="bounce" if source == "bounce_mailboxes" else "rua",
         host=entry["host"],
         username=entry["username"],
         password_env=entry["password_env"],
@@ -141,16 +168,16 @@ def _build_mailbox(entry: Dict[str, Any], source: str) -> Mailbox:
     )
 
 
-def load_rua_mailboxes(path: Optional[Path] = None) -> List[Mailbox]:
-    """Mailboxes that receive DMARC aggregate reports (Module 1)."""
+def load_rua_mailboxes_from_yaml(path: Optional[Path] = None) -> List[Mailbox]:
+    """Rua mailboxes as declared in YAML, used to seed the database."""
     path = path or CONFIG_DIR / "mailboxes.yml"
     data = _read_yaml(path)
     entries = data.get("rua_mailboxes") or []
-    return [m for m in (_build_mailbox(e, "rua_mailboxes") for e in entries) if m.enabled]
+    return [_build_mailbox(e, "rua_mailboxes") for e in entries]
 
 
-def load_bounce_mailboxes(path: Optional[Path] = None) -> List[Mailbox]:
-    """Sending mailboxes that receive bounces/NDRs (Module 3)."""
+def load_bounce_mailboxes_from_yaml(path: Optional[Path] = None) -> List[Mailbox]:
+    """Bounce mailboxes as declared in YAML, used to seed the database."""
     path = path or CONFIG_DIR / "mailboxes.yml"
     data = _read_yaml(path)
     entries = data.get("bounce_mailboxes") or []
@@ -161,11 +188,11 @@ def load_bounce_mailboxes(path: Optional[Path] = None) -> List[Mailbox]:
                 f"Bounce mailbox {box.name!r} must declare a 'domain' so its "
                 f"NDRs can be attributed to a sending domain."
             )
-    return [m for m in boxes if m.enabled]
+    return boxes
 
 
-def load_domains(path: Optional[Path] = None) -> List[Domain]:
-    """Sending domains under monitoring (Modules 2 and 4)."""
+def load_domains_from_yaml(path: Optional[Path] = None) -> List[Domain]:
+    """Domains as declared in YAML, used to seed the database."""
     path = path or CONFIG_DIR / "domains.yml"
     data = _read_yaml(path)
     defaults = data.get("defaults") or {}
@@ -186,3 +213,136 @@ def load_domains(path: Optional[Path] = None) -> List[Domain]:
             )
         )
     return domains
+
+
+# --- Database-backed configuration -------------------------------------------
+#
+# The database is the source of truth so the dashboard can manage domains and
+# mailboxes. The YAML files are read exactly once — when the tables are still
+# empty — so an existing checkout keeps working and YAML remains a valid way to
+# bootstrap a new install.
+
+
+def _domain_from_row(row: Dict[str, Any]) -> Domain:
+    return Domain(
+        id=row["id"],
+        name=row["name"],
+        dkim_selectors=list(row.get("dkim_selectors") or []),
+        notes=row.get("notes") or "",
+        enabled=bool(row.get("enabled", True)),
+    )
+
+
+def _mailbox_from_row(row: Dict[str, Any]) -> Mailbox:
+    return Mailbox(
+        id=row["id"],
+        name=row["name"],
+        kind=row["kind"],
+        host=row["host"],
+        port=int(row.get("port") or 993),
+        ssl=bool(row.get("ssl", True)),
+        username=row["username"],
+        password_encrypted=row.get("password_encrypted"),
+        password_env=row.get("password_env"),
+        folder=row.get("folder") or "INBOX",
+        processed_folder=row.get("processed_folder"),
+        domain=row.get("domain"),
+        enabled=bool(row.get("enabled", True)),
+    )
+
+
+def seed_config_from_yaml_if_empty(database=None, settings: Optional[Settings] = None) -> Dict[str, int]:
+    """Copy YAML config into the database the first time it is needed.
+
+    Only runs when the tables are empty, so it never fights with edits made in
+    the dashboard. Missing YAML files are not an error — a fresh install can
+    start with nothing configured and add everything through the UI.
+    """
+    from .storage import DomainConfigRepository, MailboxConfigRepository, get_database
+
+    settings = settings or Settings.from_env()
+    database = database or get_database(settings)
+
+    domain_repo = DomainConfigRepository(database, settings.project_id)
+    mailbox_repo = MailboxConfigRepository(database, settings.project_id)
+    seeded = {"domains": 0, "mailboxes": 0}
+
+    if domain_repo.count() == 0:
+        try:
+            for domain in load_domains_from_yaml():
+                domain_repo.create(
+                    name=domain.name,
+                    dkim_selectors=domain.dkim_selectors,
+                    notes=domain.notes,
+                    enabled=True,
+                )
+                seeded["domains"] += 1
+        except ConfigError:
+            pass
+
+    if mailbox_repo.count() == 0:
+        try:
+            entries = [(m, "rua") for m in load_rua_mailboxes_from_yaml()]
+        except ConfigError:
+            entries = []
+        try:
+            entries += [(m, "bounce") for m in load_bounce_mailboxes_from_yaml()]
+        except ConfigError:
+            pass
+
+        for mailbox, kind in entries:
+            mailbox_repo.create(
+                name=mailbox.name,
+                kind=kind,
+                host=mailbox.host,
+                port=mailbox.port,
+                ssl=mailbox.ssl,
+                username=mailbox.username,
+                # YAML mailboxes keep pointing at an env var; the password is
+                # not copied into the database on their behalf.
+                password_env=mailbox.password_env,
+                folder=mailbox.folder,
+                processed_folder=mailbox.processed_folder,
+                domain=mailbox.domain,
+                enabled=mailbox.enabled,
+            )
+            seeded["mailboxes"] += 1
+
+    return seeded
+
+
+def load_domains(database=None, settings: Optional[Settings] = None) -> List[Domain]:
+    """Enabled sending domains under monitoring (Modules 2 and 4)."""
+    from .storage import DomainConfigRepository, get_database
+
+    settings = settings or Settings.from_env()
+    database = database or get_database(settings)
+    seed_config_from_yaml_if_empty(database, settings)
+
+    repo = DomainConfigRepository(database, settings.project_id)
+    return [_domain_from_row(row) for row in repo.list_all(include_disabled=False)]
+
+
+def load_rua_mailboxes(database=None, settings: Optional[Settings] = None) -> List[Mailbox]:
+    """Enabled mailboxes that receive DMARC aggregate reports (Module 1)."""
+    from .storage import MailboxConfigRepository, get_database
+
+    settings = settings or Settings.from_env()
+    database = database or get_database(settings)
+    seed_config_from_yaml_if_empty(database, settings)
+
+    repo = MailboxConfigRepository(database, settings.project_id)
+    return [_mailbox_from_row(row) for row in repo.list_all(kind="rua", include_disabled=False)]
+
+
+def load_bounce_mailboxes(database=None, settings: Optional[Settings] = None) -> List[Mailbox]:
+    """Enabled sending mailboxes that receive bounces/NDRs (Module 3)."""
+    from .storage import MailboxConfigRepository, get_database
+
+    settings = settings or Settings.from_env()
+    database = database or get_database(settings)
+    seed_config_from_yaml_if_empty(database, settings)
+
+    repo = MailboxConfigRepository(database, settings.project_id)
+    boxes = [_mailbox_from_row(row) for row in repo.list_all(kind="bounce", include_disabled=False)]
+    return [b for b in boxes if b.domain]

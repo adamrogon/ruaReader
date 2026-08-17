@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 
 from .database import Database
 from .schema import (
@@ -18,8 +18,11 @@ from .schema import (
     dmarc_records,
     dmarc_reports,
     dns_checks,
+    flag_acknowledgements,
     ingestion_runs,
 )
+from .schema import domains as domains_table
+from .schema import mailboxes as mailboxes_table
 
 
 def _rows(result) -> List[Dict[str, Any]]:  # noqa: ANN001
@@ -427,6 +430,28 @@ class BounceRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def latest_per_domain(self, since: dt.datetime) -> List[Dict[str, Any]]:
+        """Timestamp of the most recent bounce per domain.
+
+        Used as the evidence marker for rate-based flags, which have no single
+        triggering event that an acknowledgement could otherwise be pinned to.
+        """
+        stmt = (
+            select(
+                bounces.c.sending_domain.label("domain"),
+                func.max(bounces.c.received_at).label("latest"),
+            )
+            .where(
+                and_(
+                    bounces.c.project_id == self.project_id,
+                    bounces.c.received_at >= since,
+                )
+            )
+            .group_by(bounces.c.sending_domain)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
     def unparsed_count(self, since: dt.datetime) -> int:
         """How many DSNs were stored as raw text because parsing failed."""
         stmt = select(func.count(bounces.c.id)).where(
@@ -538,6 +563,46 @@ class IngestionRunRepository(_BaseRepository):
         with self.db.connect() as conn:
             return {row["stream"]: row for row in _rows(conn.execute(stmt))}
 
+    def active_streams(self) -> List[str]:
+        """Streams with a run currently in progress.
+
+        Used to stop the dashboard's "check now" button from starting a second
+        copy of a job that is already running.
+        """
+        stmt = select(ingestion_runs.c.stream).where(
+            and_(
+                ingestion_runs.c.project_id == self.project_id,
+                ingestion_runs.c.status == "running",
+            )
+        )
+        with self.db.connect() as conn:
+            return sorted({row[0] for row in conn.execute(stmt)})
+
+    def fail_stale_running(self, older_than_minutes: int = 60) -> int:
+        """Mark long-abandoned 'running' rows as errors.
+
+        A process killed mid-run leaves its row at 'running' forever, which
+        would otherwise block that stream from ever being started again.
+        """
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=older_than_minutes)
+        with self.db.connect() as conn:
+            result = conn.execute(
+                ingestion_runs.update()
+                .where(
+                    and_(
+                        ingestion_runs.c.project_id == self.project_id,
+                        ingestion_runs.c.status == "running",
+                        ingestion_runs.c.started_at < cutoff,
+                    )
+                )
+                .values(
+                    status="error",
+                    finished_at=dt.datetime.now(dt.timezone.utc),
+                    error="Run did not finish — the process was interrupted.",
+                )
+            )
+            return int(result.rowcount or 0)
+
     def last_success_per_stream(self) -> Dict[str, dt.datetime]:
         """When each stream last completed successfully.
 
@@ -559,3 +624,266 @@ class IngestionRunRepository(_BaseRepository):
         )
         with self.db.connect() as conn:
             return {row["stream"]: row["finished_at"] for row in _rows(conn.execute(stmt))}
+
+
+# --- Configuration ------------------------------------------------------------
+
+
+class DomainConfigRepository(_BaseRepository):
+    """Sending domains, managed from the dashboard."""
+
+    def list_all(self, include_disabled: bool = True) -> List[Dict[str, Any]]:
+        conditions = [domains_table.c.project_id == self.project_id]
+        if not include_disabled:
+            conditions.append(domains_table.c.enabled.is_(True))
+        stmt = select(domains_table).where(and_(*conditions)).order_by(domains_table.c.name)
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def get(self, domain_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(domains_table).where(
+            and_(domains_table.c.id == domain_id, domains_table.c.project_id == self.project_id)
+        )
+        with self.db.connect() as conn:
+            rows = _rows(conn.execute(stmt))
+        return rows[0] if rows else None
+
+    def get_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        stmt = select(domains_table).where(
+            and_(domains_table.c.name == name, domains_table.c.project_id == self.project_id)
+        )
+        with self.db.connect() as conn:
+            rows = _rows(conn.execute(stmt))
+        return rows[0] if rows else None
+
+    def create(
+        self,
+        name: str,
+        dkim_selectors: Sequence[str],
+        notes: str = "",
+        enabled: bool = True,
+    ) -> int:
+        now = dt.datetime.now(dt.timezone.utc)
+        with self.db.connect() as conn:
+            result = conn.execute(
+                domains_table.insert().values(
+                    project_id=self.project_id,
+                    name=name.strip().lower(),
+                    dkim_selectors=list(dkim_selectors),
+                    notes=notes,
+                    enabled=enabled,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            return int(result.inserted_primary_key[0])
+
+    def update(self, domain_id: int, **fields: Any) -> None:
+        allowed = {"name", "dkim_selectors", "notes", "enabled"}
+        values = {k: v for k, v in fields.items() if k in allowed}
+        if not values:
+            return
+        if "name" in values:
+            values["name"] = values["name"].strip().lower()
+        values["updated_at"] = dt.datetime.now(dt.timezone.utc)
+        with self.db.connect() as conn:
+            conn.execute(
+                domains_table.update()
+                .where(
+                    and_(domains_table.c.id == domain_id, domains_table.c.project_id == self.project_id)
+                )
+                .values(**values)
+            )
+
+    def delete(self, domain_id: int) -> None:
+        """Remove a domain from monitoring.
+
+        Collected history (reports, bounces, DNS checks) is deliberately left
+        in place — it is keyed by domain name, so re-adding the domain later
+        picks its past straight back up.
+        """
+        with self.db.connect() as conn:
+            conn.execute(
+                domains_table.delete().where(
+                    and_(domains_table.c.id == domain_id, domains_table.c.project_id == self.project_id)
+                )
+            )
+
+    def count(self) -> int:
+        stmt = select(func.count(domains_table.c.id)).where(domains_table.c.project_id == self.project_id)
+        with self.db.connect() as conn:
+            return int(conn.execute(stmt).scalar() or 0)
+
+
+class MailboxConfigRepository(_BaseRepository):
+    """IMAP mailboxes, managed from the dashboard."""
+
+    def list_all(self, kind: Optional[str] = None, include_disabled: bool = True) -> List[Dict[str, Any]]:
+        conditions = [mailboxes_table.c.project_id == self.project_id]
+        if kind:
+            conditions.append(mailboxes_table.c.kind == kind)
+        if not include_disabled:
+            conditions.append(mailboxes_table.c.enabled.is_(True))
+        stmt = select(mailboxes_table).where(and_(*conditions)).order_by(
+            mailboxes_table.c.kind, mailboxes_table.c.name
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def get(self, mailbox_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(mailboxes_table).where(
+            and_(mailboxes_table.c.id == mailbox_id, mailboxes_table.c.project_id == self.project_id)
+        )
+        with self.db.connect() as conn:
+            rows = _rows(conn.execute(stmt))
+        return rows[0] if rows else None
+
+    def create(self, **fields: Any) -> int:
+        now = dt.datetime.now(dt.timezone.utc)
+        payload = {
+            "project_id": self.project_id,
+            "created_at": now,
+            "updated_at": now,
+            **fields,
+        }
+        with self.db.connect() as conn:
+            result = conn.execute(mailboxes_table.insert().values(**payload))
+            return int(result.inserted_primary_key[0])
+
+    def update(self, mailbox_id: int, **fields: Any) -> None:
+        allowed = {
+            "name", "kind", "host", "port", "ssl", "username", "password_encrypted",
+            "password_env", "folder", "processed_folder", "domain", "enabled",
+        }
+        values = {k: v for k, v in fields.items() if k in allowed}
+        if not values:
+            return
+        values["updated_at"] = dt.datetime.now(dt.timezone.utc)
+        with self.db.connect() as conn:
+            conn.execute(
+                mailboxes_table.update()
+                .where(
+                    and_(
+                        mailboxes_table.c.id == mailbox_id,
+                        mailboxes_table.c.project_id == self.project_id,
+                    )
+                )
+                .values(**values)
+            )
+
+    def record_test(self, mailbox_id: int, ok: bool, error: Optional[str] = None) -> None:
+        """Store the outcome of a connection test."""
+        with self.db.connect() as conn:
+            conn.execute(
+                mailboxes_table.update()
+                .where(
+                    and_(
+                        mailboxes_table.c.id == mailbox_id,
+                        mailboxes_table.c.project_id == self.project_id,
+                    )
+                )
+                .values(
+                    last_test_at=dt.datetime.now(dt.timezone.utc),
+                    last_test_ok=ok,
+                    last_test_error=error,
+                )
+            )
+
+    def delete(self, mailbox_id: int) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                mailboxes_table.delete().where(
+                    and_(
+                        mailboxes_table.c.id == mailbox_id,
+                        mailboxes_table.c.project_id == self.project_id,
+                    )
+                )
+            )
+
+    def count(self) -> int:
+        stmt = select(func.count(mailboxes_table.c.id)).where(
+            mailboxes_table.c.project_id == self.project_id
+        )
+        with self.db.connect() as conn:
+            return int(conn.execute(stmt).scalar() or 0)
+
+
+# --- Acknowledgements ---------------------------------------------------------
+
+
+class AcknowledgementRepository(_BaseRepository):
+    """"I know about this" markers on individual flags."""
+
+    def list_active(self) -> Dict[str, Dict[str, Any]]:
+        """Acknowledgements that have not expired, keyed by domain|fingerprint."""
+        now = dt.datetime.now(dt.timezone.utc)
+        stmt = select(flag_acknowledgements).where(
+            and_(
+                flag_acknowledgements.c.project_id == self.project_id,
+                or_(
+                    flag_acknowledgements.c.expires_at.is_(None),
+                    flag_acknowledgements.c.expires_at > now,
+                ),
+            )
+        )
+        with self.db.connect() as conn:
+            return {f"{row['domain']}|{row['fingerprint']}": row for row in _rows(conn.execute(stmt))}
+
+    def acknowledge(
+        self,
+        domain: str,
+        fingerprint: str,
+        note: Optional[str] = None,
+        evidence_at: Optional[dt.datetime] = None,
+        expires_at: Optional[dt.datetime] = None,
+    ) -> None:
+        """Acknowledge a flag, replacing any previous acknowledgement of it."""
+        now = dt.datetime.now(dt.timezone.utc)
+        with self.db.connect() as conn:
+            conn.execute(
+                flag_acknowledgements.delete().where(
+                    and_(
+                        flag_acknowledgements.c.project_id == self.project_id,
+                        flag_acknowledgements.c.domain == domain,
+                        flag_acknowledgements.c.fingerprint == fingerprint,
+                    )
+                )
+            )
+            conn.execute(
+                flag_acknowledgements.insert().values(
+                    project_id=self.project_id,
+                    domain=domain,
+                    fingerprint=fingerprint,
+                    note=note,
+                    acknowledged_at=now,
+                    evidence_at=evidence_at,
+                    expires_at=expires_at,
+                )
+            )
+
+    def clear(self, domain: str, fingerprint: str) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                flag_acknowledgements.delete().where(
+                    and_(
+                        flag_acknowledgements.c.project_id == self.project_id,
+                        flag_acknowledgements.c.domain == domain,
+                        flag_acknowledgements.c.fingerprint == fingerprint,
+                    )
+                )
+            )
+
+    def prune_expired(self) -> int:
+        """Delete acknowledgements whose snooze has run out."""
+        now = dt.datetime.now(dt.timezone.utc)
+        with self.db.connect() as conn:
+            result = conn.execute(
+                flag_acknowledgements.delete().where(
+                    and_(
+                        flag_acknowledgements.c.project_id == self.project_id,
+                        flag_acknowledgements.c.expires_at.is_not(None),
+                        flag_acknowledgements.c.expires_at <= now,
+                    )
+                )
+            )
+            return int(result.rowcount or 0)
