@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="{{ lang }}" data-theme-pref="{{ theme_pref | default('system') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ t('app.title') }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Poppins per the Linkhouse brand guide; the CSS falls back to system
+       fonts if this does not load, so the dashboard still works offline. -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/chart.umd.js"></script>
+  <script>
+    // Applied before paint so there is no flash of the wrong theme.
+    (function () {
+      var saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
+</head>
+<body>
+  {% set qs_days = '&days=' ~ days if days is defined else '' %}
+  {% set path = ('/domain/' ~ domain) if domain is defined else '/' %}
+
+  <div class="topbar">
+    <a href="/?lang={{ lang }}{{ qs_days }}" class="topbar-logo">
+      <img src="/static/logo-black.svg" alt="Linkhouse" height="22" class="logo-light">
+      <img src="/static/logo-white.svg" alt="Linkhouse" height="22" class="logo-dark">
+    </a>
+    <div class="topbar-spacer"></div>
+
+    <a class="topbar-control" href="{{ path }}?lang={{ other_lang }}{{ qs_days }}" title="{{ t('lang.switch_to') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"></path>
+      </svg>
+      {{ lang.upper() }}
+    </a>
+
+    <div class="topbar-divider"></div>
+
+    <button type="button" class="topbar-control" id="theme-toggle" title="Light / dark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="icon-moon">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="icon-sun" style="display:none">
+        <circle cx="12" cy="12" r="4.5"></circle>
+        <path d="M12 2v2.2M12 19.8V22M4.2 4.2l1.55 1.55M18.25 18.25l1.55 1.55M2 12h2.2M19.8 12H22M4.2 19.8l1.55-1.55M18.25 5.75l1.55-1.55"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <a href="/?lang={{ lang }}{{ qs_days }}" class="side-icon active" title="{{ t('nav.overview') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19V10M12 19V5M20 19v-6"></path>
+        </svg>
+        <span class="side-tooltip">{{ t('nav.overview') }}</span>
+      </a>
+      <span class="side-icon disabled" title="{{ t('nav.soon') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span class="side-tooltip">{{ t('nav.settings') }} · {{ t('nav.soon') }}</span>
+      </span>
+      <span class="side-icon disabled" title="{{ t('nav.soon') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 7v5l3 3"></path>
+        </svg>
+        <span class="side-tooltip">{{ t('nav.soon') }}</span>
+      </span>
+    </aside>
+
+    <div class="main">
+      <div class="wrap">
+        {% block content %}{% endblock %}
+        <footer>{{ t('footer.note') }}</footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--text-dim').trim() || '#a3a3a3';
+    Chart.defaults.borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#e7e7e7';
+    Chart.defaults.font.family = "'Poppins', -apple-system, BlinkMacSystemFont, sans-serif";
+    Chart.defaults.font.size = 11;
+    Chart.defaults.plugins.legend.labels.boxWidth = 9;
+    Chart.defaults.plugins.legend.labels.boxHeight = 9;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.plugins.legend.labels.padding = 14;
+    Chart.defaults.maintainAspectRatio = false;
+
+    const PALETTE = {
+      pass: '#3baf4f',
+      failed: '#ef4444',
+      forwarded: '#3b82f6',
+      accent: '#e9941e',
+      soft: '#f59e0b',
+      unknown: '#a3a3a3',
+      block: '#ef4444',
+    };
+
+    function currentIsDark() {
+      const attr = document.documentElement.getAttribute('data-theme');
+      if (attr === 'dark') return true;
+      if (attr === 'light') return false;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function tooltipTheme() {
+      const dark = currentIsDark();
+      return {
+        backgroundColor: dark ? '#232425' : '#1a1a1a',
+        borderColor: dark ? '#333537' : 'transparent',
+        borderWidth: dark ? 1 : 0,
+        titleColor: '#f6f6f6',
+        bodyColor: '#e2e2e2',
+        padding: 10,
+        cornerRadius: 6,
+        boxPadding: 4,
+      };
+    }
+    const TOOLTIP = tooltipTheme();
+
+    (function () {
+      const btn = document.getElementById('theme-toggle');
+      const moonIcon = btn.querySelector('.icon-moon');
+      const sunIcon = btn.querySelector('.icon-sun');
+      function sync() {
+        const dark = currentIsDark();
+        moonIcon.style.display = dark ? 'none' : 'block';
+        sunIcon.style.display = dark ? 'block' : 'none';
+      }
+      sync();
+      btn.addEventListener('click', function () {
+        const next = currentIsDark() ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        sync();
+      });
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

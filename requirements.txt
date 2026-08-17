@@ -1,0 +1,20 @@
+# Pinned to versions verified working on Python 3.9.
+# On Python 3.10+ these all still resolve; newer FastAPI/uvicorn are available.
+
+# Core
+python-dotenv==1.2.1
+PyYAML==6.0.3
+SQLAlchemy==2.0.52
+
+# Module 1 — DMARC rua parsing + IMAP (parsedmarc used as a library)
+parsedmarc==9.1.0
+IMAPClient==3.1.0
+
+# Modules 2 & 4 — DNS and DNSBL
+dnspython==2.7.0
+pydnsbl==1.1.7
+
+# Dashboard
+fastapi==0.128.8
+uvicorn==0.39.0
+Jinja2==3.1.6

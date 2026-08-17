@@ -1,0 +1,40 @@
+# Sending domains under monitoring.
+#
+# `dkim_selectors` must be listed explicitly — a DKIM record can only be looked
+# up as <selector>._domainkey.<domain>, and selectors cannot be discovered from
+# DNS. Get them from your sending platform's DNS setup screen.
+#
+# The entries below are examples that also drive `scripts/seed_demo.py`.
+# Replace them with your real sending domains.
+
+defaults:
+  # Applied to every domain unless overridden in the entry itself.
+  dkim_selectors:
+    - google        # Google Workspace default
+    - selector1     # Microsoft 365 default pair
+    - selector2
+
+domains:
+  - name: outreach-alpha.com
+    dkim_selectors: [google]
+    notes: "Google Workspace"
+
+  - name: outreach-beta.com
+    dkim_selectors: [selector1, selector2]
+    notes: "Microsoft 365"
+
+  - name: outreach-gamma.com
+    dkim_selectors: [google]
+    notes: "Google Workspace"
+
+  - name: outreach-delta.com
+    dkim_selectors: [google]
+    notes: "Google Workspace"
+
+  - name: outreach-epsilon.com
+    dkim_selectors: [selector1, selector2]
+    notes: "Microsoft 365"
+
+  - name: outreach-zeta.com
+    # No dkim_selectors key -> inherits the defaults above.
+    notes: "Google Workspace, newly added"

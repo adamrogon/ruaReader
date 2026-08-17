@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}{{ t('overview.title') }} · Linkhouse{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('overview.title') }}</h1>
+    <p>{{ t('overview.subtitle', days=days) }}</p>
+  </div>
+  <div class="range-picker">
+    {% for option in [1, 7, 14, 30] %}
+      <a href="/?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+    {% endfor %}
+  </div>
+</div>
+
+{# --- Fleet totals, in a dark accent panel ------------------------------- #}
+<div class="kpi-panel">
+  <div class="kpis">
+    <div class="kpi {{ 'is-critical' if totals.sender_blocks else 'is-ok' }}">
+      <div class="kpi-label">{{ t('kpi.sender_blocks') }}</div>
+      <div class="kpi-value">{{ totals.sender_blocks }}</div>
+    </div>
+    <div class="kpi {{ 'is-critical' if totals.blacklisted else 'is-ok' }}">
+      <div class="kpi-label">{{ t('kpi.blacklisted') }}</div>
+      <div class="kpi-value">{{ totals.blacklisted }}</div>
+    </div>
+    <div class="kpi {{ 'is-critical' if totals.critical else 'is-ok' }}">
+      <div class="kpi-label">{{ t('kpi.critical') }}</div>
+      <div class="kpi-value">{{ totals.critical }}</div>
+    </div>
+    <div class="kpi {{ 'is-warning' if totals.warning else '' }}">
+      <div class="kpi-label">{{ t('kpi.warning') }}</div>
+      <div class="kpi-value">{{ totals.warning }}</div>
+    </div>
+    <div class="kpi is-ok">
+      <div class="kpi-label">{{ t('kpi.healthy') }}</div>
+      <div class="kpi-value">{{ totals.ok }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">{{ t('kpi.messages') }}</div>
+      <div class="kpi-value">{{ "{:,}".format(totals.messages) }}</div>
+    </div>
+  </div>
+</div>
+
+{# --- Ingestion freshness ------------------------------------------------ #}
+<div class="health-strip">
+  {% for stream in health %}
+    <span class="health-pill is-{{ stream.state }}" title="{{ stream.message }}">
+      <span class="dot"></span>
+      <strong>{{ stream.label }}</strong>
+      {{ stream.state_label }}
+    </span>
+  {% endfor %}
+</div>
+
+{% set broken = health | selectattr('state', 'ne', 'ok') | list %}
+{% if broken %}
+  <div class="stale-note">
+    <strong>{{ t('health.stale_note') }}</strong>
+    {% for stream in broken %}{{ stream.message }}{% if not loop.last %} {% endif %}{% endfor %}
+  </div>
+{% endif %}
+
+{# --- Domain list, urgency ordered --------------------------------------- #}
+<h2>{{ t('section.domains') }} <span class="hint">{{ t('section.domains_hint') }}</span></h2>
+<div class="domain-list">
+  {% for status in statuses %}
+    {% set m = status.metrics %}
+    <a class="domain-card sev-{{ status.severity }}" href="/domain/{{ status.domain }}?lang={{ lang }}&days={{ days }}">
+      <div>
+        <div class="domain-name">
+          {{ status.domain }}
+          {% if m.bounces_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
+          {% if m.blacklisted_ips %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
+          {% if status.severity == 'ok' %}<span class="badge ok">{{ t('badge.ok') }}</span>{% endif %}
+        </div>
+        <div class="domain-headline">{{ status.headline }}</div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">{{ t('metric.messages') }}</div>
+        <div class="metric-value {{ 'is-dim' if not m.messages }}">{{ "{:,}".format(m.messages) }}</div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">{{ t('metric.compliance') }}</div>
+        {% if m.compliance is not none %}
+          <div class="metric-value {{ 'is-critical' if m.compliance < 0.85 else ('is-warning' if m.compliance < 0.95 else 'is-ok') }}">
+            {{ "%.0f"|format(m.compliance * 100) }}%
+          </div>
+        {% else %}
+          <div class="metric-value is-dim">—</div>
+        {% endif %}
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">{{ t('metric.bounces') }}</div>
+        <div class="metric-value {{ 'is-critical' if m.bounces_sender_block else ('is-warning' if m.bounces_hard else 'is-dim') }}">
+          {{ m.bounces_total }}
+        </div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">{{ t('metric.spf_lookups') }}</div>
+        {% if m.spf_lookups is not none %}
+          <div class="metric-value {{ 'is-critical' if m.spf_lookups > m.spf_lookup_limit else ('is-warning' if m.spf_lookups >= 8 else 'is-ok') }}">
+            {{ m.spf_lookups }}/{{ m.spf_lookup_limit }}
+          </div>
+        {% else %}
+          <div class="metric-value is-dim">—</div>
+        {% endif %}
+      </div>
+
+      <div class="chev">›</div>
+    </a>
+  {% else %}
+    <div class="empty">{{ t('empty.no_domains') }} <span class="mono">config/domains.yml</span>.</div>
+  {% endfor %}
+</div>
+
+{# --- Per-ESP breakdown across all domains -------------------------------- #}
+<h2>{{ t('section.by_provider') }} <span class="hint">{{ t('section.by_provider_hint') }}</span></h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t('table.provider') }}</th>
+        <th>{{ t('table.messages') }}</th>
+        <th>{{ t('table.compliance') }}</th>
+        <th>{{ t('table.passed') }}</th>
+        <th>{{ t('table.failed') }}</th>
+        <th>{{ t('table.forwarded') }}</th>
+        <th style="text-align:left">{{ t('table.domains_with_failures') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in esp_summary %}
+        <tr>
+          <td>
+            <span class="esp-name">
+              <span class="esp-swatch" style="background: {{ {
+                'Google': '#e9941e', 'Microsoft': '#3b82f6', 'Yahoo': '#a855f7',
+                'Seznam': '#3baf4f', 'WP/O2': '#ef4444', 'Onet': '#14b8a6'
+              }.get(row.esp, '#a3a3a3') }}"></span>
+              {{ row.esp }}
+            </span>
+          </td>
+          <td>{{ "{:,}".format(row.total) }}</td>
+          <td>
+            {% if row.compliance is not none %}
+              <span class="{{ 'num-bad' if row.compliance < 0.85 else ('num-warn' if row.compliance < 0.95 else 'num-ok') }}">
+                {{ "%.1f"|format(row.compliance * 100) }}%
+              </span>
+            {% else %}<span class="num-dim">—</span>{% endif %}
+          </td>
+          <td class="num-ok">{{ "{:,}".format(row['pass']) }}</td>
+          <td class="{{ 'num-bad' if row.failed else 'num-dim' }}">{{ "{:,}".format(row.failed) }}</td>
+          <td class="num-dim">{{ "{:,}".format(row.forwarded) }}</td>
+          <td style="text-align:left" class="truncate">
+            {% if row.affected_domains %}
+              {{ row.affected_domains | join(', ') }}
+            {% else %}<span class="num-dim">{{ t('table.none') }}</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty">{{ t('empty.no_report_data') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# --- Charts -------------------------------------------------------------- #}
+<h2>{{ t('section.trends') }}</h2>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">{{ t('chart.volume.title') }}</div>
+    <div class="card-sub">{{ t('chart.volume.sub') }}</div>
+    <div class="chart-box"><canvas id="volumeChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">{{ t('chart.bounces.title') }}</div>
+    <div class="card-sub">{{ t('chart.bounces.sub') }}</div>
+    <div class="chart-box"><canvas id="bounceChart"></canvas></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DAYS = {{ days }};
+const L = {
+  passed: {{ t('chart.legend.passed') | tojson }},
+  forwarded: {{ t('chart.legend.forwarded') | tojson }},
+  failed: {{ t('chart.legend.failed') | tojson }},
+  compliance: {{ t('chart.legend.compliance') | tojson }},
+  senderBlock: {{ t('chart.legend.sender_block') | tojson }},
+  hard: {{ t('chart.legend.hard') | tojson }},
+  soft: {{ t('chart.legend.soft') | tojson }},
+  unparsed: {{ t('chart.legend.unparsed') | tojson }},
+  axisMessages: {{ t('chart.axis.messages') | tojson }},
+  axisCompliance: {{ t('chart.axis.compliance') | tojson }},
+  axisBounces: {{ t('chart.axis.bounces') | tojson }},
+};
+
+fetch(`/api/volume?days=${DAYS}`).then(r => r.json()).then(d => {
+  new Chart(document.getElementById('volumeChart'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2 },
+        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2 },
+        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2 },
+        {
+          label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1',
+          borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
+          borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: TOOLTIP },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: L.axisMessages } },
+        y1: {
+          position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
+          title: { display: true, text: L.axisCompliance },
+        },
+      },
+    },
+  });
+});
+
+fetch(`/api/bounces?days=${DAYS}`).then(r => r.json()).then(d => {
+  new Chart(document.getElementById('bounceChart'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: L.senderBlock, data: d.sender_block, backgroundColor: PALETTE.block, stack: 'b', borderRadius: 2 },
+        { label: L.hard, data: d.hard, backgroundColor: '#b91c1c', stack: 'b', borderRadius: 2 },
+        { label: L.soft, data: d.soft, backgroundColor: PALETTE.soft, stack: 'b', borderRadius: 2 },
+        { label: L.unparsed, data: d.unknown, backgroundColor: PALETTE.unknown, stack: 'b', borderRadius: 2 },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: TOOLTIP },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: L.axisBounces } },
+      },
+    },
+  });
+});
+</script>
+{% endblock %}

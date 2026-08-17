@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}{{ domain }} · Deliverability Monitor{% endblock %}
+
+{% block content %}
+{% set m = status.metrics %}
+
+<div class="page-head">
+  <div>
+    <a class="back-link" href="/?lang={{ lang }}&days={{ days }}">{{ t('domain.back') }}</a>
+    <h1 style="margin-top:6px">
+      {{ domain }}
+      {% if m.bounces_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
+      {% if m.blacklisted_ips %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
+      {% if status.severity == 'ok' %}<span class="badge ok">{{ t('badge.healthy') }}</span>{% endif %}
+    </h1>
+    <p>{{ status.headline }}{% if notes %} · {{ notes }}{% endif %}</p>
+  </div>
+  <div class="range-picker">
+    {% for option in [1, 7, 14, 30] %}
+      <a href="/domain/{{ domain }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="kpi-panel">
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">{{ t('metric.messages') }}</div>
+      <div class="kpi-value">{{ "{:,}".format(m.messages) }}</div>
+    </div>
+    <div class="kpi {{ 'is-critical' if m.compliance is not none and m.compliance < 0.85 else ('is-warning' if m.compliance is not none and m.compliance < 0.95 else 'is-ok') }}">
+      <div class="kpi-label">{{ t('metric.compliance') }}</div>
+      <div class="kpi-value">{% if m.compliance is not none %}{{ "%.1f"|format(m.compliance * 100) }}%{% else %}—{% endif %}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">{{ t('kpi.forwarded') }}</div>
+      <div class="kpi-value">{{ "{:,}".format(m.forwarded) }}</div>
+    </div>
+    <div class="kpi {{ 'is-critical' if m.bounces_sender_block else '' }}">
+      <div class="kpi-label">{{ t('kpi.sender_blocks') }}</div>
+      <div class="kpi-value">{{ m.bounces_sender_block }}</div>
+    </div>
+    <div class="kpi {{ 'is-warning' if m.bounces_hard else '' }}">
+      <div class="kpi-label">{{ t('kpi.hard_bounces') }}</div>
+      <div class="kpi-value">{{ m.bounces_hard }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">{{ t('kpi.dmarc_policy') }}</div>
+      <div class="kpi-value" style="font-size:19px">{{ m.dmarc_policy or '—' }}</div>
+    </div>
+  </div>
+</div>
+
+{# --- What is wrong, in words -------------------------------------------- #}
+{% if status.flags %}
+  <h2>{{ t('section.attention') }} <span class="hint">{{ t('section.attention_hint') }}</span></h2>
+  <div class="flags">
+    {% for flag in status.flags %}
+      <div class="flag {{ flag.severity }}">
+        <div class="flag-head">
+          <span class="flag-title">{{ flag.title }}</span>
+          <span class="badge {{ flag.severity }}">{{ t('severity.' ~ flag.severity) }}</span>
+          <span class="flag-src">{{ flag.source }}{% if flag.esp %} · {{ flag.esp }}{% endif %}</span>
+        </div>
+        <div class="flag-msg">{{ flag.message }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <h2>{{ t('section.attention') }}</h2>
+  <div class="empty">{{ t('empty.nothing_flagged', days=days) }}</div>
+{% endif %}
+
+{# --- Per-ESP ------------------------------------------------------------- #}
+<h2>{{ t('section.by_provider') }}</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>{{ t('table.provider') }}</th><th>{{ t('table.messages') }}</th><th>{{ t('table.compliance') }}</th>
+        <th>{{ t('table.passed') }}</th><th>{{ t('table.failed') }}</th><th>{{ t('table.forwarded') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in status.esp_rows %}
+        <tr>
+          <td>
+            <span class="esp-name">
+              <span class="esp-swatch" style="background: {{ {
+                'Google': '#e9941e', 'Microsoft': '#3b82f6', 'Yahoo': '#a855f7',
+                'Seznam': '#3baf4f', 'WP/O2': '#ef4444', 'Onet': '#14b8a6'
+              }.get(row.esp, '#a3a3a3') }}"></span>
+              {{ row.esp }}
+            </span>
+          </td>
+          <td>{{ "{:,}".format(row.total) }}</td>
+          <td>
+            {% if row.compliance is not none %}
+              <span class="{{ 'num-bad' if row.compliance < 0.85 else ('num-warn' if row.compliance < 0.95 else 'num-ok') }}">
+                {{ "%.1f"|format(row.compliance * 100) }}%
+              </span>
+            {% else %}<span class="num-dim">—</span>{% endif %}
+          </td>
+          <td class="num-ok">{{ "{:,}".format(row['pass']) }}</td>
+          <td class="{{ 'num-bad' if row.failed else 'num-dim' }}">{{ "{:,}".format(row.failed) }}</td>
+          <td class="num-dim">{{ "{:,}".format(row.forwarded) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">{{ t('empty.no_report_data') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# --- Charts -------------------------------------------------------------- #}
+<div class="grid-2" style="margin-top:14px">
+  <div class="card">
+    <div class="card-title">{{ t('chart.volume.title') }}</div>
+    <div class="card-sub">{{ t('chart.volume.sub') }}</div>
+    <div class="chart-box"><canvas id="volumeChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">{{ t('section.by_provider') }}</div>
+    <div class="card-sub">{{ t('section.by_provider_hint') }}</div>
+    <div class="chart-box"><canvas id="espChart"></canvas></div>
+  </div>
+</div>
+
+{# --- Sender blocks, called out separately -------------------------------- #}
+{% if sender_blocks %}
+  <h2>{{ t('section.sender_blocks') }} <span class="hint">{{ t('section.sender_blocks_hint') }}</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>{{ t('table.when') }}</th><th style="text-align:left">{{ t('table.code') }}</th><th style="text-align:left">{{ t('table.provider') }}</th><th style="text-align:left">{{ t('table.diagnostic') }}</th></tr>
+      </thead>
+      <tbody>
+        {% for row in sender_blocks %}
+          <tr>
+            <td>{{ row.received_at.strftime('%Y-%m-%d %H:%M') if row.received_at else '—' }}</td>
+            <td style="text-align:left"><span class="badge critical">{{ row.status_code or '—' }}</span></td>
+            <td style="text-align:left">{{ row.recipient_esp or '—' }}</td>
+            <td style="text-align:left" class="mono truncate">{{ row.diagnostic_code or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+{# --- Bounce codes -------------------------------------------------------- #}
+<h2>{{ t('section.bounce_codes') }}</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th style="text-align:left">{{ t('table.code') }}</th><th style="text-align:left">{{ t('table.class') }}</th><th>{{ t('table.count') }}</th></tr>
+    </thead>
+    <tbody>
+      {% for row in bounce_codes %}
+        <tr>
+          <td style="text-align:left" class="mono">{{ row.status_code or t('table.unparsed') }}</td>
+          <td style="text-align:left">
+            <span class="badge {{ 'critical' if row.bounce_class == 'sender_block' else ('warning' if row.bounce_class == 'hard' else 'neutral') }}">
+              {{ t('bounce_class.' ~ row.bounce_class) }}
+            </span>
+          </td>
+          <td>{{ row.count }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="empty">{{ t('empty.no_bounces') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# --- DNS state ----------------------------------------------------------- #}
+<h2>{{ t('section.dns_records') }} <span class="hint">{% if dns and dns.checked_at %}{{ t('section.dns_checked_at', when=dns.checked_at.strftime('%Y-%m-%d %H:%M')) }}{% else %}{{ t('empty.dns_not_checked') }}{% endif %}</span></h2>
+{% if dns %}
+  <div class="card">
+    <div class="record-grid">
+      <div class="record-key">{{ t('dns.spf') }}</div>
+      <div class="record-val">
+        {% if dns.spf_present %}
+          <div class="mono">{{ dns.spf_record }}</div>
+          <div style="margin-top:5px">
+            <span class="badge {{ 'critical' if dns.spf_lookup_count > dns.spf_lookup_limit else ('warning' if dns.spf_lookup_count >= 8 else 'ok') }}">
+              {{ t('dns.lookups_of_limit', count=dns.spf_lookup_count, limit=dns.spf_lookup_limit) }}
+            </span>
+            {% if dns.spf_includes %}
+              <span class="num-dim" style="font-size:12px; margin-left:8px">
+                {% for inc in dns.spf_includes %}{{ inc.target }} ({{ inc.lookups }}){% if not loop.last %}, {% endif %}{% endfor %}
+              </span>
+            {% endif %}
+          </div>
+        {% else %}<span class="badge critical">{{ t('dns.missing') }}</span>{% endif %}
+      </div>
+
+      <div class="record-key">{{ t('dns.dmarc') }}</div>
+      <div class="record-val">
+        {% if dns.dmarc_present %}
+          <div class="mono">{{ dns.dmarc_record }}</div>
+          <div style="margin-top:5px">
+            <span class="badge {{ 'neutral' if dns.dmarc_policy == 'none' else 'ok' }}">p={{ dns.dmarc_policy }}</span>
+            {% if dns.dmarc_rua %}<span class="badge ok">{{ t('dns.rua_set') }}</span>{% else %}<span class="badge critical">{{ t('dns.no_rua') }}</span>{% endif %}
+          </div>
+        {% else %}<span class="badge critical">{{ t('dns.missing') }}</span>{% endif %}
+      </div>
+
+      <div class="record-key">{{ t('dns.dkim') }}</div>
+      <div class="record-val">
+        {% for entry in dns.dkim_results or [] %}
+          <span class="badge {{ 'ok' if entry.present else 'critical' }}" style="margin-right:5px">
+            {{ entry.selector }}{{ '' if entry.present else t('dns.selector_missing_suffix') }}
+          </span>
+        {% else %}
+          <span class="num-dim">{{ t('dns.no_selectors') }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="record-key">{{ t('dns.mx') }}</div>
+      <div class="record-val mono">
+        {% for mx in dns.mx_records or [] %}{{ mx.preference }} {{ mx.host }}{% if not loop.last %} · {% endif %}
+        {% else %}<span class="badge critical">{{ t('dns.none') }}</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="empty">{{ t('empty.dns_not_checked') }} <span class="mono">{{ t('run_hint.dns') }}</span>.</div>
+{% endif %}
+
+{# --- Failing sources ----------------------------------------------------- #}
+{% if top_failing %}
+  <h2>{{ t('section.failing_sources') }}</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th style="text-align:left">{{ t('table.source_ip') }}</th><th style="text-align:left">{{ t('table.host') }}</th><th style="text-align:left">{{ t('table.dkim') }}</th><th style="text-align:left">{{ t('table.spf') }}</th><th>{{ t('table.messages') }}</th></tr>
+      </thead>
+      <tbody>
+        {% for row in top_failing %}
+          <tr>
+            <td style="text-align:left" class="mono">{{ row.source_ip }}</td>
+            <td style="text-align:left" class="num-dim truncate">{{ row.source_host or '—' }}</td>
+            <td style="text-align:left" class="num-bad">{{ row.dkim_result or '—' }}</td>
+            <td style="text-align:left" class="num-bad">{{ row.spf_result or '—' }}</td>
+            <td>{{ "{:,}".format(row.messages) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DAYS = {{ days }};
+const DOMAIN = {{ domain | tojson }};
+const L = {
+  passed: {{ t('chart.legend.passed') | tojson }},
+  forwarded: {{ t('chart.legend.forwarded') | tojson }},
+  failed: {{ t('chart.legend.failed') | tojson }},
+  compliance: {{ t('chart.legend.compliance') | tojson }},
+};
+
+fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()).then(d => {
+  new Chart(document.getElementById('volumeChart'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2 },
+        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2 },
+        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2 },
+        {
+          label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1',
+          borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
+          borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: TOOLTIP },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true },
+        y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+});
+
+fetch(`/api/esp?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()).then(d => {
+  new Chart(document.getElementById('espChart'), {
+    type: 'bar',
+    data: {
+      labels: d.labels,
+      datasets: [
+        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 'e', borderRadius: 2 },
+        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 'e', borderRadius: 2 },
+        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 'e', borderRadius: 2 },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { tooltip: TOOLTIP },
+      scales: {
+        x: { stacked: true, beginAtZero: true },
+        y: { stacked: true, grid: { display: false } },
+      },
+    },
+  });
+});
+</script>
+{% endblock %}
