@@ -27,6 +27,60 @@
         <span>{{ t('field.enabled') }}</span>
       </label>
     </div>
+
+    {% if not item %}
+      {# Only offered on a brand-new domain. A domain has at most one natural
+         bounce mailbox, so this makes sense to bundle here — unlike rua,
+         which is shared across every domain and is never asked for per-domain. #}
+      <label class="field-check" style="margin-top:14px">
+        <input type="checkbox" name="add_bounce" class="js-toggle-bounce">
+        <span>{{ t('settings.add_bounce_now') }}</span>
+      </label>
+      {# The `hidden` attribute must live on a plain wrapper, not directly on
+         .form-grid — that class sets display:grid, which (being a class
+         selector) beats the UA stylesheet's [hidden]{display:none} rule and
+         would leave the section visibly showing despite `hidden` being set. #}
+      <div class="js-bounce-subform" hidden style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border)">
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">{{ t('field.name') }}</span>
+            <input type="text" name="bounce_name" autocomplete="off">
+            <span class="field-hint">{{ t('field.bounce_name_hint') }}</span>
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('field.host') }}</span>
+            <input type="text" name="bounce_host" placeholder="imap.gmail.com" autocomplete="off">
+          </label>
+          <label class="field field-narrow">
+            <span class="field-label">{{ t('field.port') }}</span>
+            <input type="number" name="bounce_port" value="993" min="1" max="65535">
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('field.username') }}</span>
+            <input type="text" name="bounce_username" placeholder="outreach@example.com" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('field.password') }}</span>
+            <input type="password" name="bounce_password" autocomplete="new-password">
+            <span class="field-hint">{{ t('field.password_hint_new') }}</span>
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('field.folder') }}</span>
+            <input type="text" name="bounce_folder" value="INBOX" autocomplete="off">
+          </label>
+          <label class="field">
+            <span class="field-label">{{ t('field.processed_folder') }}</span>
+            <input type="text" name="bounce_processed_folder" autocomplete="off">
+            <span class="field-hint">{{ t('field.processed_hint') }}</span>
+          </label>
+          <label class="field-check">
+            <input type="checkbox" name="bounce_ssl" checked>
+            <span>{{ t('field.ssl') }}</span>
+          </label>
+        </div>
+      </div>
+    {% endif %}
+
     <div class="form-actions">
       <button type="button" class="btn btn-ghost js-test-domain">{{ t('btn.test_domain') }}</button>
       <span class="test-result"></span>
@@ -260,7 +314,16 @@
 {% endif %}
 
 {# --- Rua mailboxes -------------------------------------------------------- #}
-<h2>{{ t('settings.mailboxes_rua') }} <span class="hint">{{ t('settings.mailboxes_rua_hint') }}</span></h2>
+<h2 id="rua-section">{{ t('settings.mailboxes_rua') }} <span class="hint">{{ t('settings.mailboxes_rua_hint') }}</span></h2>
+{% if not rua_mailboxes %}
+  <div class="banner banner-warning">
+    <strong>{{ t('settings.no_rua_nudge_title') }}</strong><br>
+    {{ t('settings.no_rua_nudge_body') }}
+    <button type="button" class="btn btn-primary btn-sm js-edit" data-target="rua-add" style="margin-left:8px">
+      {{ t('settings.no_rua_nudge_cta') }}
+    </button>
+  </div>
+{% endif %}
 <div class="cfg-list">{{ mailbox_rows('rua', rua_mailboxes) }}</div>
 <button type="button" class="btn btn-add js-edit" data-target="rua-add">+ {{ t('settings.add_mailbox') }}</button>
 <div class="cfg-edit" id="rua-add" hidden>{{ mailbox_form('rua', none, 'mbform-new-rua') }}</div>
@@ -287,6 +350,16 @@ async function postTest(url, body) {
   }
   return res.json();
 }
+
+// In the "add domain" form, the bounce-mailbox fields only need to be filled
+// (and required-checked server-side) when the user actually wants them —
+// toggle their visibility with the checkbox rather than always showing them.
+document.querySelectorAll('.js-toggle-bounce').forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    const subform = checkbox.closest('form').querySelector('.js-bounce-subform');
+    if (subform) subform.hidden = !checkbox.checked;
+  });
+});
 
 // Show/hide the inline add and edit forms.
 document.querySelectorAll('.js-edit').forEach(btn => {

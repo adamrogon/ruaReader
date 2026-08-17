@@ -741,6 +741,27 @@ MESSAGES: dict = {
         "pl": "Wszystkie raporty rua trafiają w domeny z Twojej listy. Nic do posprzątania.",
         "en": "Every rua report matches a monitored domain. Nothing to reconcile.",
     },
+
+    # --- Combined add-domain-plus-bounce-mailbox flow -------------------------
+    "settings.add_bounce_now": {
+        "pl": "Dodaj też skrzynkę bounce dla tej domeny",
+        "en": "Also add a bounce mailbox for this domain",
+    },
+    "field.bounce_name_hint": {
+        "pl": "puste = użyta zostanie nazwa domeny",
+        "en": "blank = the domain name is used",
+    },
+
+    # --- One-time nudge to add a central rua mailbox --------------------------
+    "settings.no_rua_nudge_title": {
+        "pl": "Nie masz jeszcze skrzynki na raporty DMARC",
+        "en": "You don't have a DMARC report mailbox yet",
+    },
+    "settings.no_rua_nudge_body": {
+        "pl": "Jedna centralna skrzynka wystarczy dla wszystkich domen naraz — nie trzeba jej dodawać osobno dla każdej.",
+        "en": "One central mailbox is enough for every domain at once — no need to add it per domain.",
+    },
+    "settings.no_rua_nudge_cta": {"pl": "Dodaj skrzynkę rua", "en": "Add rua mailbox"},
 }
 
 

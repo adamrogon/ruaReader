@@ -346,10 +346,24 @@ def save_domain(
     dkim_selectors: str = Form(""),
     notes: str = Form(""),
     enabled: Optional[str] = Form(None),
+    # Optional inline "also add a bounce mailbox for this domain" — only
+    # offered when adding a brand-new domain (domain_id is None). A domain has
+    # at most one natural bounce mailbox, unlike rua, which is shared across
+    # every domain and so is never asked for here — see the module docstring.
+    add_bounce: Optional[str] = Form(None),
+    bounce_name: str = Form(""),
+    bounce_host: str = Form(""),
+    bounce_port: int = Form(993),
+    bounce_ssl: Optional[str] = Form(None),
+    bounce_username: str = Form(""),
+    bounce_password: str = Form(""),
+    bounce_folder: str = Form("INBOX"),
+    bounce_processed_folder: str = Form(""),
 ):
     lang = _resolve_request_lang(request)
     ctx = _context()
-    repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+    domain_repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+    mailbox_repo = MailboxConfigRepository(ctx["database"], ctx["settings"].project_id)
 
     clean_name = (name or "").strip().lower()
     if not clean_name:
@@ -357,15 +371,52 @@ def save_domain(
 
     selectors = _selectors_from_form(dkim_selectors)
     is_enabled = enabled is not None
+    is_new = not domain_id
 
+    # --- Validate everything before writing anything ------------------------
+    # Two repositories are involved; without a shared transaction, the only
+    # way to avoid a half-created domain-with-no-mailbox is to check both
+    # halves up front and only then touch the database.
+    if is_new and domain_repo.get_by_name(clean_name):
+        return _settings_redirect(lang, error="domain_exists")
+
+    want_bounce = is_new and add_bounce is not None
+    bounce_fields: Optional[Dict[str, Any]] = None
+    if want_bounce:
+        if not bounce_host.strip() or not bounce_username.strip():
+            return _settings_redirect(lang, error="required")
+
+        clean_bounce_name = bounce_name.strip() or clean_name
+        if any(m["name"] == clean_bounce_name for m in mailbox_repo.list_all()):
+            return _settings_redirect(lang, error="mailbox_exists")
+
+        bounce_fields = {
+            "name": clean_bounce_name,
+            "kind": "bounce",
+            "host": bounce_host.strip(),
+            "port": int(bounce_port),
+            "ssl": bounce_ssl is not None,
+            "username": bounce_username.strip(),
+            "folder": (bounce_folder or "INBOX").strip(),
+            "processed_folder": bounce_processed_folder.strip() or None,
+            "domain": clean_name,
+            "enabled": True,
+        }
+        if bounce_password:
+            try:
+                bounce_fields["password_encrypted"] = encrypt_secret(bounce_password)
+            except SecretsError:
+                return _settings_redirect(lang, error="no_secret_key")
+
+    # --- Now write ------------------------------------------------------------
     if domain_id:
-        repo.update(
+        domain_repo.update(
             domain_id, name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled
         )
     else:
-        if repo.get_by_name(clean_name):
-            return _settings_redirect(lang, error="domain_exists")
-        repo.create(name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled)
+        domain_repo.create(name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled)
+        if bounce_fields:
+            mailbox_repo.create(**bounce_fields)
 
     return _settings_redirect(lang, notice="domain_saved")
 
