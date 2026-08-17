@@ -421,15 +421,22 @@ def save_domain(
             except SecretsError:
                 return _settings_redirect(lang, error="no_secret_key")
 
-    # Rua has no domain field — it is not tied to the domain being created,
-    # just conveniently offered alongside it when none exists yet.
+    # Rua has no domain field on the mailbox row — a report's own XML content
+    # decides which domain it belongs to, not which mailbox it arrived in
+    # (see health.py). This is just a convenience to create one alongside the
+    # domain in the same submit; one rua mailbox per domain is as valid a
+    # setup as a single consolidated one.
     want_rua = is_new and add_rua is not None
     rua_fields: Optional[Dict[str, Any]] = None
     if want_rua:
         if not rua_host.strip() or not rua_username.strip():
             return _settings_redirect(lang, error="required")
 
-        clean_rua_name = rua_name.strip() or "rua-main"
+        # A plain default of clean_name would collide with the bounce
+        # mailbox's own default of clean_name if both boxes are checked and
+        # both names are left blank — the -rua suffix keeps that the common
+        # case rather than an error the user has to work around.
+        clean_rua_name = rua_name.strip() or f"{clean_name}-rua"
         existing_names = {m["name"] for m in mailbox_repo.list_all()}
         if clean_rua_name in existing_names:
             return _settings_redirect(lang, error="mailbox_exists")
