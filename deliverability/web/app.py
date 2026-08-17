@@ -359,6 +359,19 @@ def save_domain(
     bounce_password: str = Form(""),
     bounce_folder: str = Form("INBOX"),
     bounce_processed_folder: str = Form(""),
+    # Optional inline "also add the central rua mailbox" — the template only
+    # offers this checkbox while zero rua mailboxes exist yet (see
+    # settings.html's offer_rua), since rua is shared across every domain and
+    # should not be re-prompted for on each subsequent one.
+    add_rua: Optional[str] = Form(None),
+    rua_name: str = Form(""),
+    rua_host: str = Form(""),
+    rua_port: int = Form(993),
+    rua_ssl: Optional[str] = Form(None),
+    rua_username: str = Form(""),
+    rua_password: str = Form(""),
+    rua_folder: str = Form("INBOX"),
+    rua_processed_folder: str = Form(""),
 ):
     lang = _resolve_request_lang(request)
     ctx = _context()
@@ -408,6 +421,41 @@ def save_domain(
             except SecretsError:
                 return _settings_redirect(lang, error="no_secret_key")
 
+    # Rua has no domain field — it is not tied to the domain being created,
+    # just conveniently offered alongside it when none exists yet.
+    want_rua = is_new and add_rua is not None
+    rua_fields: Optional[Dict[str, Any]] = None
+    if want_rua:
+        if not rua_host.strip() or not rua_username.strip():
+            return _settings_redirect(lang, error="required")
+
+        clean_rua_name = rua_name.strip() or "rua-main"
+        existing_names = {m["name"] for m in mailbox_repo.list_all()}
+        if clean_rua_name in existing_names:
+            return _settings_redirect(lang, error="mailbox_exists")
+        # Both sub-forms could pick the same default/typed name; catch that
+        # collision too, since neither has been written yet at this point.
+        if bounce_fields and bounce_fields["name"] == clean_rua_name:
+            return _settings_redirect(lang, error="mailbox_exists")
+
+        rua_fields = {
+            "name": clean_rua_name,
+            "kind": "rua",
+            "host": rua_host.strip(),
+            "port": int(rua_port),
+            "ssl": rua_ssl is not None,
+            "username": rua_username.strip(),
+            "folder": (rua_folder or "INBOX").strip(),
+            "processed_folder": rua_processed_folder.strip() or None,
+            "domain": None,
+            "enabled": True,
+        }
+        if rua_password:
+            try:
+                rua_fields["password_encrypted"] = encrypt_secret(rua_password)
+            except SecretsError:
+                return _settings_redirect(lang, error="no_secret_key")
+
     # --- Now write ------------------------------------------------------------
     if domain_id:
         domain_repo.update(
@@ -417,6 +465,8 @@ def save_domain(
         domain_repo.create(name=clean_name, dkim_selectors=selectors, notes=notes, enabled=is_enabled)
         if bounce_fields:
             mailbox_repo.create(**bounce_fields)
+        if rua_fields:
+            mailbox_repo.create(**rua_fields)
 
     return _settings_redirect(lang, notice="domain_saved")
 

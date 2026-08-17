@@ -747,6 +747,11 @@ MESSAGES: dict = {
         "pl": "Dodaj też skrzynkę bounce dla tej domeny",
         "en": "Also add a bounce mailbox for this domain",
     },
+    "settings.add_rua_now": {
+        "pl": "Dodaj też centralną skrzynkę rua (raporty DMARC)",
+        "en": "Also add the central rua mailbox (DMARC reports)",
+    },
+    "field.rua_name_hint": {"pl": "puste = domyślnie rua-main", "en": "blank = defaults to rua-main"},
     "field.bounce_name_hint": {
         "pl": "puste = użyta zostanie nazwa domeny",
         "en": "blank = the domain name is used",

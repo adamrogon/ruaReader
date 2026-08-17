@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ t('settings.title') }} · Linkhouse{% endblock %}
 
-{% macro domain_form(item=None, form_id='') %}
+{% macro domain_form(item=None, form_id='', offer_rua=False) %}
   {# One form shape for both add and edit; a hidden id switches the server between them. #}
   <form method="post" action="/settings/domains?lang={{ lang }}" class="cfg-form" id="{{ form_id }}">
     {% if item %}<input type="hidden" name="domain_id" value="{{ item.id }}">{% endif %}
@@ -79,6 +79,57 @@
           </label>
         </div>
       </div>
+
+      {% if offer_rua %}
+        {# Only offered while zero rua mailboxes exist anywhere — unlike
+           bounce, rua is shared across every domain, so once one exists there
+           is nothing to gain from prompting for another on each new domain
+           (that would nudge toward the un-consolidated, harder-to-maintain
+           pattern instead of away from it). #}
+        <label class="field-check" style="margin-top:14px">
+          <input type="checkbox" name="add_rua" class="js-toggle-rua">
+          <span>{{ t('settings.add_rua_now') }}</span>
+        </label>
+        <div class="js-rua-subform" hidden style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border)">
+          <div class="form-grid">
+            <label class="field">
+              <span class="field-label">{{ t('field.name') }}</span>
+              <input type="text" name="rua_name" autocomplete="off" placeholder="rua-main">
+              <span class="field-hint">{{ t('field.rua_name_hint') }}</span>
+            </label>
+            <label class="field">
+              <span class="field-label">{{ t('field.host') }}</span>
+              <input type="text" name="rua_host" placeholder="imap.gmail.com" autocomplete="off">
+            </label>
+            <label class="field field-narrow">
+              <span class="field-label">{{ t('field.port') }}</span>
+              <input type="number" name="rua_port" value="993" min="1" max="65535">
+            </label>
+            <label class="field">
+              <span class="field-label">{{ t('field.username') }}</span>
+              <input type="text" name="rua_username" placeholder="dmarc@example.com" autocomplete="off">
+            </label>
+            <label class="field">
+              <span class="field-label">{{ t('field.password') }}</span>
+              <input type="password" name="rua_password" autocomplete="new-password">
+              <span class="field-hint">{{ t('field.password_hint_new') }}</span>
+            </label>
+            <label class="field">
+              <span class="field-label">{{ t('field.folder') }}</span>
+              <input type="text" name="rua_folder" value="INBOX" autocomplete="off">
+            </label>
+            <label class="field">
+              <span class="field-label">{{ t('field.processed_folder') }}</span>
+              <input type="text" name="rua_processed_folder" autocomplete="off">
+              <span class="field-hint">{{ t('field.processed_hint') }}</span>
+            </label>
+            <label class="field-check">
+              <input type="checkbox" name="rua_ssl" checked>
+              <span>{{ t('field.ssl') }}</span>
+            </label>
+          </div>
+        </div>
+      {% endif %}
     {% endif %}
 
     <div class="form-actions">
@@ -284,7 +335,7 @@
 </div>
 
 <button type="button" class="btn btn-add js-edit" data-target="dom-add">+ {{ t('settings.add_domain') }}</button>
-<div class="cfg-edit" id="dom-add" hidden>{{ domain_form(none, 'domform-new') }}</div>
+<div class="cfg-edit" id="dom-add" hidden>{{ domain_form(none, 'domform-new', offer_rua=(not rua_mailboxes)) }}</div>
 
 {# --- Domains that show up in reports but are not monitored --------------- #}
 {% if unknown_report_domains %}
@@ -357,6 +408,12 @@ async function postTest(url, body) {
 document.querySelectorAll('.js-toggle-bounce').forEach(checkbox => {
   checkbox.addEventListener('change', () => {
     const subform = checkbox.closest('form').querySelector('.js-bounce-subform');
+    if (subform) subform.hidden = !checkbox.checked;
+  });
+});
+document.querySelectorAll('.js-toggle-rua').forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    const subform = checkbox.closest('form').querySelector('.js-rua-subform');
     if (subform) subform.hidden = !checkbox.checked;
   });
 });
