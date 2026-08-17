@@ -471,12 +471,16 @@ tbody tr:hover { background: var(--surface-2); }
 .field-wide { grid-column: 1 / -1; }
 .field-narrow { max-width: 130px; }
 .field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
-.field input[type="text"], .field input[type="password"], .field input[type="number"] {
+.field input[type="text"], .field input[type="password"], .field input[type="number"], .field select {
   padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong); background: var(--surface);
   color: var(--text); font-size: 13px; font-family: inherit; width: 100%;
 }
-.field input:focus {
+.field select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%237a7c7e' d='M0 0l5 6 5-6z'/></svg>");
+  background-repeat: no-repeat; background-position: right 11px center;
+}
+.field input:focus, .field select:focus {
   outline: none; border-color: var(--lh-orange);
   box-shadow: 0 0 0 3px var(--lh-orange-soft);
 }

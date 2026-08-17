@@ -48,10 +48,26 @@
         <span class="field-hint">{{ t('field.name_hint') }}</span>
       </label>
       {% if kind == 'bounce' %}
+        {# Dropdown, not text — the whole point is that the user cannot type a
+           domain that doesn't match one already monitored. The user's chosen
+           domain is preselected on edit; if it is no longer on the monitored
+           list, it still appears (so editing does not silently lose it), but
+           is marked so the user notices. #}
+        {% set current = item.domain if item else '' %}
         <label class="field">
           <span class="field-label">{{ t('field.sending_domain') }} *</span>
-          <input type="text" name="domain" required value="{{ item.domain if item else '' }}"
-                 placeholder="example.com" autocomplete="off">
+          <select name="domain" required class="js-bounce-domain">
+            <option value="">{{ t('field.sending_domain_placeholder') }}</option>
+            {% for d in monitored_names %}
+              <option value="{{ d }}" {{ 'selected' if d == current }}>{{ d }}</option>
+            {% endfor %}
+            {% if current and current not in monitored_names %}
+              <option value="{{ current }}" selected>
+                {{ current }} {{ t('field.sending_domain_orphan_suffix') }}
+              </option>
+            {% endif %}
+          </select>
+          <span class="field-hint">{{ t('field.sending_domain_hint') }}</span>
         </label>
       {% endif %}
       <label class="field">
@@ -166,7 +182,9 @@
   'required': t('error.required'),
   'domain_exists': t('error.domain_exists'),
   'mailbox_exists': t('error.mailbox_exists'),
-  'no_secret_key': t('error.no_secret_key')
+  'no_secret_key': t('error.no_secret_key'),
+  'no_domains_for_bounce': t('error.no_domains_for_bounce'),
+  'bounce_domain_unknown': t('error.bounce_domain_unknown', domain='')
 } %}
 
 {% if notice and notice in notices %}
@@ -214,6 +232,33 @@
 <button type="button" class="btn btn-add js-edit" data-target="dom-add">+ {{ t('settings.add_domain') }}</button>
 <div class="cfg-edit" id="dom-add" hidden>{{ domain_form(none, 'domform-new') }}</div>
 
+{# --- Domains that show up in reports but are not monitored --------------- #}
+{% if unknown_report_domains %}
+  <h2>{{ t('section.unknown_domains') }}
+    <span class="hint">{{ t('section.unknown_domains_hint') }}</span>
+  </h2>
+  <div class="cfg-list">
+    {% for row in unknown_report_domains %}
+      <div class="cfg-row">
+        <div class="cfg-main">
+          <div class="cfg-name">
+            {{ row.domain }}
+            <span class="badge warning">{{ t('unknown.report_count', n=row.report_count) }}</span>
+          </div>
+          <div class="cfg-meta">
+            {% if row.latest %}{{ t('unknown.latest', when=row.latest.strftime('%Y-%m-%d')) }}{% endif %}
+          </div>
+        </div>
+        <div class="cfg-actions">
+          {# Prefills the "Add domain" form with this name and opens it. #}
+          <button type="button" class="btn btn-primary btn-sm js-add-unknown"
+                  data-domain="{{ row.domain }}">{{ t('unknown.add') }}</button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 {# --- Rua mailboxes -------------------------------------------------------- #}
 <h2>{{ t('settings.mailboxes_rua') }} <span class="hint">{{ t('settings.mailboxes_rua_hint') }}</span></h2>
 <div class="cfg-list">{{ mailbox_rows('rua', rua_mailboxes) }}</div>
@@ -248,6 +293,40 @@ document.querySelectorAll('.js-edit').forEach(btn => {
   btn.addEventListener('click', () => {
     const el = document.getElementById(btn.dataset.target);
     if (el) el.hidden = !el.hidden;
+  });
+});
+
+// "Add to monitored" on an unknown-domain row: open the Add-domain form with
+// the name prefilled so the user only has to review DKIM selectors and save.
+document.querySelectorAll('.js-add-unknown').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const addPanel = document.getElementById('dom-add');
+    if (!addPanel) return;
+    addPanel.hidden = false;
+    const nameInput = addPanel.querySelector('[name="name"]');
+    if (nameInput) { nameInput.value = btn.dataset.domain; nameInput.focus(); }
+    addPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+});
+
+// On a bounce mailbox form, when the user types a username like
+// "outreach@example.com", auto-pick example.com in the domain dropdown if it
+// is on the monitored list. Zero typing on the domain field = zero typo path.
+document.querySelectorAll('form').forEach(form => {
+  const usernameEl = form.querySelector('[name="username"]');
+  const domainSelect = form.querySelector('select.js-bounce-domain');
+  if (!usernameEl || !domainSelect) return;
+
+  usernameEl.addEventListener('input', () => {
+    // Only auto-fill if the dropdown is still on its placeholder; never
+    // overwrite an explicit choice the user has already made.
+    if (domainSelect.value) return;
+    const match = usernameEl.value.match(/@([\w.-]+)$/);
+    if (!match) return;
+    const wanted = match[1].toLowerCase();
+    for (const opt of domainSelect.options) {
+      if (opt.value === wanted) { domainSelect.value = wanted; break; }
+    }
   });
 });
 document.querySelectorAll('.js-cancel').forEach(btn => {

@@ -293,16 +293,32 @@ def settings_page(request: Request, notice: Optional[str] = None, error: Optiona
 
     domain_repo = DomainConfigRepository(database, settings.project_id)
     mailbox_repo = MailboxConfigRepository(database, settings.project_id)
+    dmarc_repo = DmarcRepository(database, settings.project_id)
 
     mailboxes = mailbox_repo.list_all()
+    domains = domain_repo.list_all()
+    monitored_names = {d["name"] for d in domains}
+
+    # For the bounce mailbox dropdown: the current list of choices, plus any
+    # value stored on an existing bounce mailbox that is no longer on the
+    # monitored list (so editing does not silently drop it). Marked as orphan
+    # so the template can flag it.
+    bounce_mailboxes = [m for m in mailboxes if m["kind"] == "bounce"]
+    orphan_bounce_domains = sorted(
+        {m["domain"] for m in bounce_mailboxes if m["domain"] and m["domain"] not in monitored_names}
+    )
+
     return _render(
         request,
         "settings.html",
         lang,
         {
-            "domains": domain_repo.list_all(),
+            "domains": domains,
+            "monitored_names": sorted(monitored_names),
+            "orphan_bounce_domains": orphan_bounce_domains,
             "rua_mailboxes": [m for m in mailboxes if m["kind"] == "rua"],
-            "bounce_mailboxes": [m for m in mailboxes if m["kind"] == "bounce"],
+            "bounce_mailboxes": bounce_mailboxes,
+            "unknown_report_domains": dmarc_repo.unknown_report_domains(),
             "secret_key_ok": secret_key_configured(),
             "notice": notice,
             "error": error,
@@ -385,8 +401,22 @@ def save_mailbox(
     clean_name = (name or "").strip()
     if not clean_name or not host.strip() or not username.strip():
         return _settings_redirect(lang, error="required")
-    if kind == "bounce" and not domain.strip():
-        return _settings_redirect(lang, error="required")
+
+    clean_domain = domain.strip().lower() or None
+
+    if kind == "bounce":
+        if not clean_domain:
+            return _settings_redirect(lang, error="required")
+        # A bounce mailbox that references a domain not on the monitored list
+        # would silently attribute its bounces to that domain, and nothing on
+        # the dashboard would show them (there is no domain page for it).
+        # Refuse now, when the user is still looking at the form.
+        domain_repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+        monitored = {d["name"] for d in domain_repo.list_all()}
+        if not monitored:
+            return _settings_redirect(lang, error="no_domains_for_bounce")
+        if clean_domain not in monitored:
+            return _settings_redirect(lang, error="bounce_domain_unknown")
 
     fields: Dict[str, Any] = {
         "name": clean_name,
@@ -397,7 +427,7 @@ def save_mailbox(
         "username": username.strip(),
         "folder": (folder or "INBOX").strip(),
         "processed_folder": processed_folder.strip() or None,
-        "domain": domain.strip().lower() or None,
+        "domain": clean_domain,
         "enabled": enabled is not None,
     }
 

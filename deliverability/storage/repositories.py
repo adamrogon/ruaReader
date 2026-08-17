@@ -205,6 +205,38 @@ class DmarcRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def unknown_report_domains(self) -> List[Dict[str, Any]]:
+        """Domains that show up in incoming rua reports but are not on the
+        monitored list.
+
+        Reports arrive with ``policy_published > domain`` set by whoever wrote
+        the report, and that value is what the dashboard filters by. If a
+        report arrives for a domain the user has not added — because of a
+        typo when adding the domain, or a new domain nobody remembered to
+        register here — the data is stored but never surfaces on any page.
+        This query exposes that gap so the Settings screen can flag it.
+        """
+        monitored = select(domains_table.c.name).where(
+            domains_table.c.project_id == self.project_id
+        )
+        stmt = (
+            select(
+                dmarc_reports.c.policy_domain.label("domain"),
+                func.count(dmarc_reports.c.id).label("report_count"),
+                func.max(dmarc_reports.c.date_end).label("latest"),
+            )
+            .where(
+                and_(
+                    dmarc_reports.c.project_id == self.project_id,
+                    dmarc_reports.c.policy_domain.notin_(monitored),
+                )
+            )
+            .group_by(dmarc_reports.c.policy_domain)
+            .order_by(desc("latest"))
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
     def top_failing_sources(
         self, since: dt.datetime, domain: Optional[str] = None, limit: int = 20
     ) -> List[Dict[str, Any]]:

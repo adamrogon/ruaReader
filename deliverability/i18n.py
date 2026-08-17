@@ -698,6 +698,49 @@ MESSAGES: dict = {
         "If the problem happens again, the mark clears itself.",
     },
     "ack.section": {"pl": "Obsłużone", "en": "Handled"},
+
+    # --- Domain consistency between the three places -------------------------
+    "field.sending_domain_hint": {
+        "pl": "wybierz z listy monitorowanych domen — dane odbić przypiszą się właśnie do niej",
+        "en": "pick from monitored domains — bounce data will be tied to this one",
+    },
+    "field.sending_domain_placeholder": {
+        "pl": "— wybierz domenę —",
+        "en": "— pick a domain —",
+    },
+    "field.sending_domain_orphan_suffix": {
+        "pl": "(nie ma jej już na liście monitorowanych)",
+        "en": "(no longer on the monitored list)",
+    },
+    "error.no_domains_for_bounce": {
+        # Straight quotes only in these strings — the file is Python source, and
+        # a stray “curly” inside a "double-quoted" template closes the string.
+        "pl": "Najpierw dodaj domenę w sekcji Monitorowane domeny. Bez tego skrzynka odbić nie ma do czego się podpiąć.",
+        "en": "Add a domain under Monitored domains first. A bounce mailbox needs a monitored domain to attach to.",
+    },
+    "error.bounce_domain_unknown": {
+        "pl": "Domena {domain} nie jest na liście monitorowanych. Dodaj ją tam albo wybierz inną.",
+        "en": "Domain {domain} is not in the monitored list. Add it there, or pick a different one.",
+    },
+    "warning.bounce_username_mismatch": {
+        "pl": "Uwaga: użytkownik skrzynki jest w domenie {user_domain}, a jako domena nadawcza wybrano {picked}. To bywa "
+        "poprawne (np. alias), ale częściej to literówka — sprawdź, że dane odbić trafią tam, gdzie chcesz.",
+        "en": "Warning: the mailbox user is at {user_domain} but the sending domain is set to {picked}. This can be "
+        "correct (aliases), but is more often a typo — check that bounce data will land where you expect.",
+    },
+
+    "section.unknown_domains": {"pl": "Nieznane domeny w raportach", "en": "Unknown domains in reports"},
+    "section.unknown_domains_hint": {
+        "pl": "raporty rua przychodzą dla tych domen, ale ich nie ma na liście monitorowanych — literówka albo brakująca pozycja",
+        "en": "rua reports are arriving for these domains, but they are not on the monitored list — a typo or a missing entry",
+    },
+    "unknown.report_count": {"pl": "{n} raport(y)", "en": "{n} report(s)"},
+    "unknown.latest": {"pl": "ostatni {when}", "en": "latest {when}"},
+    "unknown.add": {"pl": "Dodaj do monitorowanych", "en": "Add to monitored"},
+    "unknown.none": {
+        "pl": "Wszystkie raporty rua trafiają w domeny z Twojej listy. Nic do posprzątania.",
+        "en": "Every rua report matches a monitored domain. Nothing to reconcile.",
+    },
 }
 
 
