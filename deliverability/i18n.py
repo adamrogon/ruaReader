@@ -175,6 +175,13 @@ MESSAGES: dict = {
         "pl": "Źródła z największym wolumenem błędów",
         "en": "Highest-volume failing sources",
     },
+    "section.failing_sources_hint": {
+        "pl": "adresy IP wysyłające jako Twoja domena, ale bez ważnego SPF/DKIM — typowo zapomniany "
+        "dawny dostawca, nowa usługa której nie dodano do SPF, albo ktoś podszywający się. Dane "
+        "z raportów DMARC.",
+        "en": "IPs sending as your domain but without valid SPF/DKIM — typically a forgotten former "
+        "provider, a new service not yet in SPF, or someone spoofing you. Sourced from DMARC reports.",
+    },
 
     "kpi.forwarded": {"pl": "Przekierowane", "en": "Forwarded"},
     "kpi.hard_bounces": {"pl": "Twarde odbicia", "en": "Hard bounces"},
@@ -288,6 +295,26 @@ MESSAGES: dict = {
     "flag.sender_block.message_other": {
         "pl": "{esp} również odrzuca pocztę z tej domeny.",
         "en": "{esp} is also refusing mail from this domain.",
+    },
+    # "Minor" variant used when the rejecting ESP is not one of the majors —
+    # same signal, calmer wording, warning severity instead of critical.
+    "flag.sender_block.title_minor": {
+        "pl": "Odrzucenie u {esp} ({count} razy)",
+        "en": "Rejected by {esp} ({count}×)",
+    },
+    "flag.sender_block.message_minor": {
+        "pl": "{esp} odrzucił pocztę z tej domeny{codes_suffix}. **To pojedynczy niszowy dostawca**, "
+        "nie duży odbiorca (Google/Microsoft/Yahoo), więc nie ma powodu wstrzymywać wysyłki na "
+        "podstawie samego tego sygnału.\n\n"
+        "**Co zrobić:** zajrzyj do logu odbić poniżej, jeśli chcesz zrozumieć powód (często to lokalna "
+        "polityka odbiorcy: whitelist, custom filtr). Zacznij działać dopiero jeśli ten sam kod "
+        "pojawi się u któregoś z dużych dostawców.",
+        "en": "{esp} refused mail from this domain{codes_suffix}. **This is a single niche provider**, "
+        "not a major receiver (Google/Microsoft/Yahoo), so there's no reason to pause sending on "
+        "the strength of this signal alone.\n\n"
+        "**What to do:** check the bounce log below if you want to understand why (often a local "
+        "policy of the receiver: whitelist, custom filter). Only start acting on it if the same "
+        "code shows up at one of the major providers.",
     },
 
     # --- Flags: blacklist ------------------------------------------------------

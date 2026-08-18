@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, case, desc, func, select
 
 from .database import Database
 from .schema import (
@@ -495,18 +495,42 @@ class BounceRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    # Whitelist of user-selectable sort columns. The values name the tuple of
+    # (primary, tiebreaker) SQL expressions used for the ORDER BY. Kept as a
+    # small dict so the web layer can validate ``sort`` from the URL against a
+    # closed set instead of trusting whatever comes in.
+    _SORT_COLUMNS = {
+        "received_at": (bounces.c.received_at,),
+        # "Severity" order: sender_block worst, then hard, soft, unknown.
+        # Encoded with a CASE so ASC/DESC toggles behave predictably —
+        # ASC = most severe first, DESC = least severe first.
+        "class": (
+            case(
+                (bounces.c.bounce_class == "sender_block", 0),
+                (bounces.c.bounce_class == "hard", 1),
+                (bounces.c.bounce_class == "soft", 2),
+                else_=3,
+            ),
+            bounces.c.received_at,
+        ),
+        "status_code": (bounces.c.status_code, bounces.c.received_at),
+        "recipient_domain": (bounces.c.recipient_domain, bounces.c.received_at),
+    }
+
     def recent_paged(
         self,
         since: dt.datetime,
         domain: Optional[str] = None,
         page: int = 1,
         per_page: int = 10,
+        sort: str = "received_at",
+        order: str = "desc",
     ) -> Dict[str, Any]:
         """One page of recent bounces plus the total count for pager arithmetic.
 
-        Server-side pagination — the underlying log grows unbounded, and
-        rendering the whole thing every request would get slow well before
-        the browser would notice.
+        ``sort`` and ``order`` are validated against a closed whitelist here,
+        so untrusted values from the URL cannot inject SQL. Unknown values
+        silently fall back to the default (newest first).
         """
         conditions = [
             bounces.c.project_id == self.project_id,
@@ -515,18 +539,29 @@ class BounceRepository(_BaseRepository):
         if domain:
             conditions.append(bounces.c.sending_domain == domain)
 
+        sort_exprs = self._SORT_COLUMNS.get(sort) or self._SORT_COLUMNS["received_at"]
+        direction = desc if order.lower() != "asc" else (lambda x: x)
+        order_by = [direction(expr) for expr in sort_exprs]
+
         total_stmt = select(func.count()).select_from(bounces).where(and_(*conditions))
         page_stmt = (
             select(bounces)
             .where(and_(*conditions))
-            .order_by(desc(bounces.c.received_at))
+            .order_by(*order_by)
             .limit(per_page)
             .offset(max(0, (page - 1)) * per_page)
         )
         with self.db.connect() as conn:
             total = int(conn.execute(total_stmt).scalar() or 0)
             rows = _rows(conn.execute(page_stmt))
-        return {"rows": rows, "total": total, "page": max(1, page), "per_page": per_page}
+        return {
+            "rows": rows,
+            "total": total,
+            "page": max(1, page),
+            "per_page": per_page,
+            "sort": sort if sort in self._SORT_COLUMNS else "received_at",
+            "order": "asc" if order.lower() == "asc" else "desc",
+        }
 
     def latest_per_domain(self, since: dt.datetime) -> List[Dict[str, Any]]:
         """Timestamp of the most recent bounce per domain.

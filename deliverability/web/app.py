@@ -115,6 +115,61 @@ def _bounce_code_help(code: Optional[str], lang: str) -> str:
     resolved = translate(key, lang)
     return "" if resolved == key else resolved
 
+
+def _trim_diagnostic(text: Optional[str], max_len: int = 250) -> str:
+    """Extract the meaningful part of a bounce diagnostic.
+
+    Real bounces routinely include the original message body — signature,
+    disclaimers, the outreach pitch itself. This function finds the actual
+    bounce content by anchoring on strong markers (``failed:``, an enhanced
+    status code like ``5.7.1``, ``smtp;``, ``rejected``) and keeps a window
+    of text around them. Falls back to a plain truncation when no anchor
+    exists so a row is never returned empty.
+
+    Deliberately excludes weaker words like ``delivery`` (matches "delivery
+    software" too), ``mailbox``, ``recipient`` — those cause false positives
+    in the ``This message was created automatically by mail delivery
+    software`` preamble that most bounces start with.
+    """
+    import re
+
+    if not text:
+        return ""
+    text = text.strip()
+
+    # Where the useful bounce content typically begins.
+    anchor = re.compile(
+        r"\b[245]\.\d+\.\d+\b|failed:|smtp\s*;|\brejected\b|address(?:es)?\s+failed",
+        re.IGNORECASE,
+    )
+    # Where the useful content typically ENDS — a greeting, a signature
+    # separator, a quoted-text prefix, a horizontal divider. Everything past
+    # one of these is the outreach body echoed back into the bounce, not
+    # something the reader needs to see in the summary.
+    end_marker = re.compile(
+        r"\n\s*(?:Hello|Hi|Dear|Cześć|Witam|Dzień\s+dobry)[, ]|"
+        r"\n--\s*\n|\n\s*[_=─-]{6,}|\n\s*>|"
+        r"\n\s*(?:Best\s+regards|Kind\s+regards|Regards|Sincerely|Thanks|Pozdrawiam|Pozdrowienia)\b",
+        re.IGNORECASE,
+    )
+
+    m = anchor.search(text)
+    if m:
+        start = max(0, m.start() - 40)
+        # Prefer cutting at an end-marker if there is one within the window.
+        end_search = end_marker.search(text, m.end())
+        hard_end = start + max_len
+        if end_search and end_search.start() < hard_end:
+            end = end_search.start()
+        else:
+            end = hard_end
+        return ("…" if start else "") + text[start:end].rstrip() + ("…" if end < len(text) else "")
+
+    # No anchor: return the text as-is if short, otherwise a plain truncation.
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rstrip() + "…"
+
 DEFAULT_WINDOW_DAYS = 7
 LANG_COOKIE = "lang"
 
@@ -236,6 +291,11 @@ def domain_detail(
     domain: str,
     days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90),
     bounce_page: int = Query(1, ge=1, le=10_000),
+    # Sort/order for the raw log. Validated inside the repository against a
+    # closed whitelist, so passing an unknown column here falls back to
+    # newest-first rather than raising.
+    bounce_sort: str = Query("received_at"),
+    bounce_order: str = Query("desc"),
 ):
     lang = _resolve_request_lang(request)
     ctx = _context()
@@ -258,7 +318,13 @@ def domain_detail(
     # jargon isn't the only thing on the row.
     bounce_summary_rows = bounce_repo.summary_by_code(since, domain)
     bounce_summary = [
-        dict(row, code_help=_bounce_code_help(row["status_code"], lang))
+        dict(
+            row,
+            code_help=_bounce_code_help(row["status_code"], lang),
+            # Full body was often megabytes of the original outreach echoed
+            # back — cut to the meaningful window around the SMTP status.
+            sample_diagnostic=_trim_diagnostic(row["sample_diagnostic"]),
+        )
         for row in bounce_summary_rows
     ]
 
@@ -266,9 +332,16 @@ def domain_detail(
     # weeks of ingestion, and pager arithmetic runs server-side against the
     # real row count rather than being guessed from an over-fetched list.
     per_page = 10
-    page_data = bounce_repo.recent_paged(since, domain, page=bounce_page, per_page=per_page)
+    page_data = bounce_repo.recent_paged(
+        since, domain, page=bounce_page, per_page=per_page,
+        sort=bounce_sort, order=bounce_order,
+    )
     recent_bounces = [
-        dict(r, code_help=_bounce_code_help(r["status_code"], lang))
+        dict(
+            r,
+            code_help=_bounce_code_help(r["status_code"], lang),
+            diagnostic_code=_trim_diagnostic(r["diagnostic_code"]),
+        )
         for r in page_data["rows"]
     ]
     total = page_data["total"]
@@ -292,6 +365,11 @@ def domain_detail(
                 "per_page": per_page,
                 "has_prev": current_page > 1,
                 "has_next": current_page < total_pages,
+                # Echoed back the validated values so the template can build
+                # sort links relative to what's actually active (not what the
+                # URL happened to ask for).
+                "sort": page_data["sort"],
+                "order": page_data["order"],
             },
             "top_failing": DmarcRepository(database, settings.project_id).top_failing_sources(
                 since, domain, limit=12

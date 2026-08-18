@@ -36,9 +36,13 @@ STALENESS_HOURS = 48
 
 SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2, "ok": 3}
 
-# Urgency weights. Sender block is highest by design — it is the one signal
-# that means "stop sending from this domain now".
+# Urgency weights. A sender block at a MAJOR provider is the one signal that
+# means "stop sending from this domain now". The same code from a small,
+# unknown mailbox host is often just their local quirk (a whitelist scheme,
+# a badly-set-up filter) and does not warrant the same alarm — so it becomes
+# a lesser warning instead of a critical block. See MAJOR_ESPS below.
 URGENCY_SENDER_BLOCK = 1000
+URGENCY_SENDER_BLOCK_MINOR = 150
 URGENCY_BLACKLISTED = 800
 URGENCY_DNS_CRITICAL = 600
 URGENCY_HIGH_HARD_BOUNCE = 400
@@ -46,6 +50,14 @@ URGENCY_LOW_COMPLIANCE = 300
 URGENCY_DNS_WARNING = 150
 URGENCY_NO_DATA = 90
 URGENCY_SOFT_BOUNCE = 50
+
+# Providers whose sender-block verdict genuinely matters at scale. A 5.7.x
+# from these means real trouble; from anywhere else, treat it as a signal
+# worth showing but not worth halting a domain over.
+MAJOR_ESPS = frozenset(
+    {"Google", "Microsoft", "Yahoo", "Apple", "Proton",
+     "Seznam", "WP/O2", "Onet", "Interia", "Mail.ru", "GMX/United Internet"}
+)
 
 # Thresholds for the derived warnings.
 HARD_BOUNCE_RATE_WARN = 0.05
@@ -268,38 +280,47 @@ def build_domain_status(
     status = DomainStatus(domain=domain_name)
     flags: List[Flag] = []
 
-    # --- Sender blocks: the single most important signal -------------------
+    # --- Sender blocks -----------------------------------------------------
+    # One flag per ESP that rejected us. Major providers get a critical flag
+    # (their opinion is worth halting a domain over); small/unknown hosts get
+    # a warning-level "minor" variant with a lighter message — same block,
+    # much less alarming presentation.
     if sender_blocks:
         by_esp: Dict[str, int] = {}
         for row in sender_blocks:
             by_esp[row.get("recipient_esp") or "Unknown"] = by_esp.get(row.get("recipient_esp") or "Unknown", 0) + 1
-        worst_esp = max(by_esp, key=by_esp.get)
-        codes = sorted({row.get("status_code") for row in sender_blocks if row.get("status_code")})
-        codes_suffix = Nested("flag.sender_block.codes_suffix", codes=", ".join(codes)) if codes else Nested(None)
 
-        flags.append(
-            Flag(
-                severity="critical",
-                title_key="flag.sender_block.title",
-                title_params={"esp": worst_esp, "count": by_esp[worst_esp]},
-                message_key="flag.sender_block.message",
-                message_params={"esp": worst_esp, "codes_suffix": codes_suffix},
-                source="bounce",
-                esp=worst_esp,
-                urgency_weight=URGENCY_SENDER_BLOCK,
-            )
+        def _weight_for(esp_name: str) -> tuple:
+            """severity, urgency_weight, title_key, message_key for this ESP."""
+            if esp_name in MAJOR_ESPS:
+                return "critical", URGENCY_SENDER_BLOCK, "flag.sender_block.title", "flag.sender_block.message"
+            return "warning", URGENCY_SENDER_BLOCK_MINOR, "flag.sender_block.title_minor", "flag.sender_block.message_minor"
+
+        # Rank so the loudest (most rejections at a major ESP) leads. Major
+        # first, then by count within each tier — a single rejection at
+        # Google outranks ten at a random hoster.
+        ranked = sorted(
+            by_esp.items(),
+            key=lambda kv: (kv[0] not in MAJOR_ESPS, -kv[1]),
         )
-        for esp, count in sorted(by_esp.items(), key=lambda kv: -kv[1])[1:]:
+        for esp, count in ranked:
+            severity, weight, title_key, message_key = _weight_for(esp)
+            codes = sorted({
+                row.get("status_code") for row in sender_blocks
+                if (row.get("recipient_esp") or "Unknown") == esp and row.get("status_code")
+            })
+            codes_suffix = Nested("flag.sender_block.codes_suffix", codes=", ".join(codes)) if codes else Nested(None)
+
             flags.append(
                 Flag(
-                    severity="critical",
-                    title_key="flag.sender_block.title_other",
+                    severity=severity,
+                    title_key=title_key,
                     title_params={"esp": esp, "count": count},
-                    message_key="flag.sender_block.message_other",
-                    message_params={"esp": esp},
+                    message_key=message_key,
+                    message_params={"esp": esp, "codes_suffix": codes_suffix},
                     source="bounce",
                     esp=esp,
-                    urgency_weight=URGENCY_SENDER_BLOCK,
+                    urgency_weight=weight,
                 )
             )
 
