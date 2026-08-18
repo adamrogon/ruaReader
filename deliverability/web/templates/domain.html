@@ -226,7 +226,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th style="text-align:left">{{ t('table.source_ip') }}</th><th style="text-align:left">{{ t('table.host') }}</th><th style="text-align:left">{{ t('table.dkim') }}</th><th style="text-align:left">{{ t('table.spf') }}</th><th>{{ t('table.messages') }}</th></tr>
+        <tr><th style="text-align:left">{{ t('table.source_ip') }}</th><th style="text-align:left">{{ t('table.host') }}</th><th style="text-align:left">{{ t('table.dkim') }}</th><th style="text-align:left">{{ t('table.spf') }}</th><th style="text-align:left">{{ t('table.disposition') }}</th><th>{{ t('table.messages') }}</th></tr>
       </thead>
       <tbody>
         {% for row in top_failing %}
@@ -235,6 +235,12 @@
             <td style="text-align:left" class="num-dim truncate">{{ row.source_host or '—' }}</td>
             <td style="text-align:left" class="num-bad">{{ row.dkim_result or '—' }}</td>
             <td style="text-align:left" class="num-bad">{{ row.spf_result or '—' }}</td>
+            <td style="text-align:left">
+              {% if row.disposition == 'reject' %}<span class="badge critical">{{ t('disposition.reject') }}</span>
+              {% elif row.disposition == 'quarantine' %}<span class="badge warning">{{ t('disposition.quarantine') }}</span>
+              {% elif row.disposition == 'none' %}<span class="badge">{{ t('disposition.none') }}</span>
+              {% else %}—{% endif %}
+            </td>
             <td>{{ "{:,}".format(row.messages) }}</td>
           </tr>
         {% endfor %}

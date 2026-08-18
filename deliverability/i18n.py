@@ -83,6 +83,10 @@ MESSAGES: dict = {
 
     "table.provider": {"pl": "Dostawca", "en": "Provider"},
     "table.messages": {"pl": "Wiadomości", "en": "Messages"},
+    "table.disposition": {"pl": "Dyspozycja", "en": "Disposition"},
+    "disposition.reject": {"pl": "odrzucono", "en": "rejected"},
+    "disposition.quarantine": {"pl": "kwarantanna", "en": "quarantined"},
+    "disposition.none": {"pl": "przepuszczono", "en": "delivered anyway"},
     "table.compliance": {"pl": "Zgodność", "en": "Compliance"},
     "table.passed": {"pl": "Zaliczone", "en": "Passed"},
     "table.failed": {"pl": "Niezaliczone", "en": "Failed"},
