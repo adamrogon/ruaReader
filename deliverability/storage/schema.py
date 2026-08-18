@@ -272,30 +272,6 @@ mailboxes = Table(
 )
 
 
-flag_acknowledgements = Table(
-    "flag_acknowledgements",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("project_id", String(64), nullable=False, index=True),
-    Column("domain", String(255), nullable=False, index=True),
-    # Stable identity of a problem: domain + source + message type + provider.
-    # Deliberately excludes counts, so "4 rejections" and "5 rejections" are
-    # the same flag — but see evidence_at for how new occurrences reopen it.
-    Column("fingerprint", String(64), nullable=False),
-    Column("note", Text),
-    Column("acknowledged_at", DateTime, nullable=False),
-    # Timestamp of the newest underlying evidence at the moment of
-    # acknowledgement. If fresher evidence arrives later, the acknowledgement
-    # no longer applies and the flag comes back — acknowledging a block must
-    # not hide the next one.
-    Column("evidence_at", DateTime),
-    # Optional snooze. Null means "until the problem resolves itself".
-    Column("expires_at", DateTime),
-    UniqueConstraint("project_id", "domain", "fingerprint", name="uq_flag_ack"),
-    Index("ix_flag_acks_domain", "domain", "fingerprint"),
-)
-
-
 ALL_TABLES = (
     dmarc_reports,
     dmarc_records,
@@ -305,5 +281,4 @@ ALL_TABLES = (
     ingestion_runs,
     domains,
     mailboxes,
-    flag_acknowledgements,
 )

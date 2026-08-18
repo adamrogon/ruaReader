@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, func, select
 
 from .database import Database
 from .schema import (
@@ -18,7 +18,6 @@ from .schema import (
     dmarc_records,
     dmarc_reports,
     dns_checks,
-    flag_acknowledgements,
     ingestion_runs,
 )
 from .schema import domains as domains_table
@@ -840,82 +839,3 @@ class MailboxConfigRepository(_BaseRepository):
             return int(conn.execute(stmt).scalar() or 0)
 
 
-# --- Acknowledgements ---------------------------------------------------------
-
-
-class AcknowledgementRepository(_BaseRepository):
-    """"I know about this" markers on individual flags."""
-
-    def list_active(self) -> Dict[str, Dict[str, Any]]:
-        """Acknowledgements that have not expired, keyed by domain|fingerprint."""
-        now = dt.datetime.now(dt.timezone.utc)
-        stmt = select(flag_acknowledgements).where(
-            and_(
-                flag_acknowledgements.c.project_id == self.project_id,
-                or_(
-                    flag_acknowledgements.c.expires_at.is_(None),
-                    flag_acknowledgements.c.expires_at > now,
-                ),
-            )
-        )
-        with self.db.connect() as conn:
-            return {f"{row['domain']}|{row['fingerprint']}": row for row in _rows(conn.execute(stmt))}
-
-    def acknowledge(
-        self,
-        domain: str,
-        fingerprint: str,
-        note: Optional[str] = None,
-        evidence_at: Optional[dt.datetime] = None,
-        expires_at: Optional[dt.datetime] = None,
-    ) -> None:
-        """Acknowledge a flag, replacing any previous acknowledgement of it."""
-        now = dt.datetime.now(dt.timezone.utc)
-        with self.db.connect() as conn:
-            conn.execute(
-                flag_acknowledgements.delete().where(
-                    and_(
-                        flag_acknowledgements.c.project_id == self.project_id,
-                        flag_acknowledgements.c.domain == domain,
-                        flag_acknowledgements.c.fingerprint == fingerprint,
-                    )
-                )
-            )
-            conn.execute(
-                flag_acknowledgements.insert().values(
-                    project_id=self.project_id,
-                    domain=domain,
-                    fingerprint=fingerprint,
-                    note=note,
-                    acknowledged_at=now,
-                    evidence_at=evidence_at,
-                    expires_at=expires_at,
-                )
-            )
-
-    def clear(self, domain: str, fingerprint: str) -> None:
-        with self.db.connect() as conn:
-            conn.execute(
-                flag_acknowledgements.delete().where(
-                    and_(
-                        flag_acknowledgements.c.project_id == self.project_id,
-                        flag_acknowledgements.c.domain == domain,
-                        flag_acknowledgements.c.fingerprint == fingerprint,
-                    )
-                )
-            )
-
-    def prune_expired(self) -> int:
-        """Delete acknowledgements whose snooze has run out."""
-        now = dt.datetime.now(dt.timezone.utc)
-        with self.db.connect() as conn:
-            result = conn.execute(
-                flag_acknowledgements.delete().where(
-                    and_(
-                        flag_acknowledgements.c.project_id == self.project_id,
-                        flag_acknowledgements.c.expires_at.is_not(None),
-                        flag_acknowledgements.c.expires_at <= now,
-                    )
-                )
-            )
-            return int(result.rowcount or 0)

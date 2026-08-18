@@ -41,6 +41,27 @@ _BLOCK_PHRASES = re.compile(
     re.IGNORECASE,
 )
 
+# Language inside a 5.7.x rejection that means this specific message is NOT a
+# sender-reputation block, even though the code family suggests it. Cold
+# outreach hits several of these regularly and they were making almost
+# everything look like a sender block, drowning out the real ones.
+#
+# The right classification for each of these — hard vs. soft — is decided
+# elsewhere in classify_bounce(); this pattern only stops the sender_block
+# override for the 5.7.x family.
+_NOT_SENDER_BLOCK_PHRASES = re.compile(
+    r"delivery\s*loop|"
+    r"relay\s*access\s*denied|"           # local relay policy at the receiver, not a reputation call
+    r"no\s*such\s*user|user\s*unknown|"
+    r"address\s*not\s*found|"
+    r"nie\s*znaleziono\s*adresu|"          # Polish 'address not found'
+    r"does\s*not\s*exist|"
+    r"account\s+does\s+not\s+exist|"
+    r"mailbox\s+(is\s+)?full|"             # 5.7.x used for full mailboxes at some hosts
+    r"whitelist(?!\s*.{0,30}(policy|reputation|block))",  # whitelist-of-known-senders, not reputation
+    re.IGNORECASE,
+)
+
 # Per-code explanations, written for someone deciding whether to keep sending
 # from a domain today.
 _CODE_EXPLANATIONS = {
@@ -124,17 +145,26 @@ def classify_bounce(
         klass, subject, detail = code.split(".")
         explanation = _CODE_EXPLANATIONS.get(code)
 
-        # Sender-block detection, exactly as specified: 5.1.8 and the whole
-        # 5.7.x family.
+        # Sender-block detection: 5.1.8 and the 5.7.x family in principle —
+        # but only if the diagnostic actually reads like a reputation call.
+        # A delivery loop, an unknown user, a full mailbox, or a whitelist
+        # scheme also live in 5.7.x at various providers, and blindly counting
+        # them as sender blocks makes a healthy domain look critically broken.
+        diag_text = f"{diagnostic_code or ''} {raw_text or ''}"
         if klass == "5" and (code == "5.1.8" or subject == "7"):
-            return (
-                BounceClass.SENDER_BLOCK,
-                explanation
-                or (
-                    f"{code} — the provider refused mail from this sender on policy or "
-                    f"reputation grounds. This is about the sending domain, not the recipient."
-                ),
-            )
+            if _NOT_SENDER_BLOCK_PHRASES.search(diag_text):
+                # Fall through to the hard/soft branches below with a specific
+                # explanation so the user knows why the 5.7.x didn't count.
+                pass
+            else:
+                return (
+                    BounceClass.SENDER_BLOCK,
+                    explanation
+                    or (
+                        f"{code} — the provider refused mail from this sender on policy or "
+                        f"reputation grounds. This is about the sending domain, not the recipient."
+                    ),
+                )
 
         if klass == "5":
             # A permanent failure whose text is clearly about blocking rather

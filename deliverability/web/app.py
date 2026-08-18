@@ -29,7 +29,6 @@ from ..secrets import SecretsError
 from ..secrets import encrypt as encrypt_secret
 from ..secrets import is_configured as secret_key_configured
 from ..storage import (
-    AcknowledgementRepository,
     BounceRepository,
     DmarcRepository,
     DnsRepository,
@@ -44,6 +43,43 @@ BASE_DIR = Path(__file__).resolve().parent
 app = FastAPI(title="Deliverability Monitor", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _bold_markers(text: str) -> "Any":
+    """Turn markdown-ish markers in translated strings into inline HTML.
+
+    ``**bold**`` becomes ``<strong>bold</strong>`` and `` `code` `` becomes
+    ``<code>code</code>``. Runs AFTER Jinja/markupsafe has escaped the
+    rendered string, so any HTML that leaked into a parameter (a mailbox name
+    someone typed, a diagnostic string from a mail server) has already been
+    neutralised — only the literal ``**`` and `` ` `` markers, which the
+    escaper leaves alone, are turned into tags. That is what makes it safe to
+    mark the result with :func:`Markup` here.
+    """
+    import re
+
+    from markupsafe import Markup, escape
+
+    result = str(escape(text))
+    result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
+    result = re.sub(r"`([^`]+?)`", r"<code>\1</code>", result)
+    return Markup(result)
+
+
+templates.env.filters["bold_markers"] = _bold_markers
+
+
+def _bounce_code_help(code: Optional[str], lang: str) -> str:
+    """Human one-liner for an SMTP status code, or '' if none is defined.
+
+    Returned as an empty string (not the raw key) when no translation exists,
+    so the template can just check truthiness before rendering the help row.
+    """
+    if not code:
+        return ""
+    key = f"bounce.code_help.{code}"
+    resolved = translate(key, lang)
+    return "" if resolved == key else resolved
 
 DEFAULT_WINDOW_DAYS = 7
 LANG_COOKIE = "lang"
@@ -186,7 +222,14 @@ def domain_detail(request: Request, domain: str, days: int = Query(DEFAULT_WINDO
             "domain": domain,
             "dns": dns_row,
             "bounce_codes": bounce_repo.counts_by_code(since, domain),
-            "recent_bounces": bounce_repo.recent(since, domain, limit=40),
+            # Enrich each bounce with a plain-language one-liner for its SMTP
+            # code, so the log tells the user what the jargon means without a
+            # lookup elsewhere. Resolved here (not in the template) so a code
+            # with no help entry becomes an empty string, not a bare key.
+            "recent_bounces": [
+                dict(r, code_help=_bounce_code_help(r["status_code"], lang))
+                for r in bounce_repo.recent(since, domain, limit=40)
+            ],
             "sender_blocks": bounce_repo.sender_blocks(since, domain),
             "top_failing": DmarcRepository(database, settings.project_id).top_failing_sources(
                 since, domain, limit=12
@@ -669,47 +712,6 @@ def api_run_status() -> JSONResponse:
     """Which streams are mid-run, for the UI to poll after pressing the button."""
     ctx = _context()
     return JSONResponse({"running": jobs.running_streams(ctx["settings"], ctx["database"])})
-
-
-# --- Acknowledgements ---------------------------------------------------------
-
-
-@app.post("/api/flags/{domain}/ack")
-def api_ack_flag(
-    request: Request,
-    domain: str,
-    fingerprint: str = Form(...),
-    note: str = Form(""),
-    evidence_at: str = Form(""),
-) -> JSONResponse:
-    """Mark a flag as handled.
-
-    ``evidence_at`` is echoed back from the rendered flag so the
-    acknowledgement is pinned to the evidence the user actually looked at —
-    anything newer reopens it. See health._apply_acknowledgements.
-    """
-    ctx = _context()
-    repo = AcknowledgementRepository(ctx["database"], ctx["settings"].project_id)
-
-    parsed_evidence: Optional[dt.datetime] = None
-    if evidence_at:
-        try:
-            parsed_evidence = dt.datetime.fromisoformat(evidence_at)
-            if parsed_evidence.tzinfo is None:
-                parsed_evidence = parsed_evidence.replace(tzinfo=dt.timezone.utc)
-        except ValueError:
-            parsed_evidence = None
-
-    repo.acknowledge(domain, fingerprint, note=note.strip() or None, evidence_at=parsed_evidence)
-    return JSONResponse({"ok": True})
-
-
-@app.post("/api/flags/{domain}/unack")
-def api_unack_flag(request: Request, domain: str, fingerprint: str = Form(...)) -> JSONResponse:
-    """Undo an acknowledgement."""
-    ctx = _context()
-    AcknowledgementRepository(ctx["database"], ctx["settings"].project_id).clear(domain, fingerprint)
-    return JSONResponse({"ok": True})
 
 
 @app.get("/api/health")

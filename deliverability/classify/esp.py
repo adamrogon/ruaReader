@@ -35,8 +35,8 @@ UNKNOWN = "Unknown"
 
 # Ordered — first match wins, so put narrower patterns first.
 _ORG_PATTERNS: Tuple[Tuple[str, str], ...] = (
-    (r"google|gmail", GOOGLE),
-    (r"outlook|hotmail|microsoft|enterprise\s*outlook|office\s*365|msn\b", MICROSOFT),
+    (r"google|gmail|1e100\.net", GOOGLE),
+    (r"outlook|hotmail|microsoft|enterprise\s*outlook|office\s*365|msn\b|protection\.outlook", MICROSOFT),
     (r"yahoo|oath|verizon\s*media", YAHOO),
     (r"\baol\b", AOL),
     (r"seznam", SEZNAM),
@@ -46,10 +46,42 @@ _ORG_PATTERNS: Tuple[Tuple[str, str], ...] = (
     (r"mail\.ru|corp\.mail", MAILRU),
     (r"proton", PROTON),
     (r"zoho", ZOHO),
-    (r"apple|icloud|me\.com", APPLE),
+    (r"apple|icloud|me\.com|mac\.com", APPLE),
     (r"fastmail|messagingengine", FASTMAIL),
-    (r"gmx|united[\s-]*internet|web\.de|1&1|ionos", GMX),
+    (r"gmx|united[\s-]*internet|web\.de|1&1|ionos|kundenserver", GMX),
     (r"comcast", COMCAST),
+    # Extra European hosters/ESPs that show up regularly in cold-outreach
+    # bounce streams; without these they fall into "Other" and make the
+    # per-provider view less useful than it should be.
+    (r"home\.pl|homepl", "home.pl"),
+    (r"nazwa\.pl|serwer\.pl", "nazwa.pl"),
+    (r"cyberfolks|smtp\.cyber", "cyberFolks"),
+    (r"hekko|hetiner|linuxpl|mydevil", "Hekko/MyDevil"),
+    (r"seohost", "SEOhost"),
+    (r"ovh|ovhcloud", "OVH"),
+    (r"all-?inkl|allinkl", "All-Inkl"),
+    (r"hosteurope|host-europe", "HostEurope"),
+    (r"strato", "Strato"),
+    (r"mittwald", "Mittwald"),
+    (r"cloudflare|email-routing", "Cloudflare"),
+    (r"amazonses|amazonaws\.com", "Amazon SES"),
+    (r"sendgrid", "SendGrid"),
+    (r"mailgun", "Mailgun"),
+    (r"mailjet", "Mailjet"),
+    (r"postmark", "Postmark"),
+    (r"sparkpost", "SparkPost"),
+    (r"mailchimp|mandrill", "Mailchimp"),
+    (r"mailerlite", "MailerLite"),
+    (r"getresponse", "GetResponse"),
+    (r"activecampaign", "ActiveCampaign"),
+    (r"sitesell", "SiteSell"),
+    (r"emaillabs\.net\.pl|emaillabs", "EmailLabs"),
+    (r"freshmail", "FreshMail"),
+    (r"woodpecker", "Woodpecker"),
+    (r"instantly", "Instantly"),
+    (r"smartlead", "Smartlead"),
+    (r"apollo\.io|apolloio", "Apollo"),
+    (r"reply\.io", "Reply.io"),
 )
 
 _COMPILED_ORG = tuple((re.compile(p, re.IGNORECASE), label) for p, label in _ORG_PATTERNS)
@@ -113,6 +145,56 @@ def esp_from_email_domain(domain: Optional[str]) -> str:
     for pattern, label in _COMPILED_ORG:
         if pattern.search(text):
             return label
+    return OTHER
+
+
+# In-process cache for MX-based classification. One lookup per unique recipient
+# domain across an ingestion run; a batch of 500 bounces to 30 distinct domains
+# is 30 DNS queries, not 500.
+_MX_ESP_CACHE: Dict[str, str] = {}
+
+
+def esp_from_mx(domain: Optional[str], timeout: float = 3.0) -> str:
+    """Label a provider by looking up the recipient domain's MX record.
+
+    Answers what pattern matching on the address string alone cannot:
+    ``foo@custom-company.com`` gives no clue where the mail actually lives,
+    but the MX often does (e.g. ``mx.google.com`` → Google, ``.protection.outlook``
+    → Microsoft, ``mx.home.pl`` → home.pl). Falls back to :const:`OTHER` on
+    lookup failure or when no MX host matches any known pattern — the caller
+    then treats the result the same as any other unclassified case.
+
+    Results are cached per process; safe to call repeatedly.
+    """
+    if not domain:
+        return UNKNOWN
+    key = domain.strip().lower()
+    if not key:
+        return UNKNOWN
+    if key in _MX_ESP_CACHE:
+        return _MX_ESP_CACHE[key]
+
+    try:
+        import dns.exception
+        import dns.resolver
+
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = timeout
+        resolver.lifetime = timeout
+        answers = resolver.resolve(key, "MX")
+    except Exception:  # noqa: BLE001 — any DNS problem is a graceful OTHER
+        _MX_ESP_CACHE[key] = OTHER
+        return OTHER
+
+    for rdata in answers:
+        host = str(rdata.exchange).rstrip(".").lower()
+        # esp_from_mta already knows the source and org patterns.
+        label = esp_from_mta(host)
+        if label not in (UNKNOWN, OTHER):
+            _MX_ESP_CACHE[key] = label
+            return label
+
+    _MX_ESP_CACHE[key] = OTHER
     return OTHER
 
 

@@ -23,7 +23,7 @@ from email.message import Message
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..classify.bounce_codes import BounceClass, classify_bounce, extract_status_code, smtp_class
-from ..classify.esp import esp_from_email_domain, esp_from_mta
+from ..classify.esp import esp_from_email_domain, esp_from_mta, esp_from_mx
 from ..config import Mailbox, Settings, load_bounce_mailboxes
 from ..storage import BounceRepository, Database, IngestionRunRepository, get_database
 from .imap_client import fetch_messages, header_datetime, move_to_folder, open_mailbox
@@ -201,11 +201,21 @@ def parse_bounce(message: Message, mailbox: Mailbox, salt: str) -> Dict[str, Any
 
     # Prefer the rejecting MTA's identity for ESP attribution; a custom domain
     # hosted at Google only reveals itself through the MTA hostname.
+    # Three-step fallback: rejecting MTA first (most authoritative — the actual
+    # server that answered), then the address's own domain string, and finally
+    # a real MX lookup for domains that don't reveal the provider by name (a
+    # custom-domain Google Workspace tenant, a home.pl-hosted mailbox, etc.).
+    # The MX step is cached per-process so 500 bounces to 30 unique domains
+    # cost 30 DNS queries, not 500.
     recipient_esp = esp_from_mta(remote_mta or reporting_mta)
     if recipient_esp in ("Unknown", "Other"):
         from_domain_esp = esp_from_email_domain(recipient_domain)
         if from_domain_esp not in ("Unknown", "Other"):
             recipient_esp = from_domain_esp
+    if recipient_esp in ("Unknown", "Other") and recipient_domain:
+        mx_esp = esp_from_mx(recipient_domain)
+        if mx_esp not in ("Unknown", "Other"):
+            recipient_esp = mx_esp
 
     return {
         "sending_domain": mailbox.domain,

@@ -357,7 +357,36 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
 .flag-title { font-weight: 600; font-size: 13.5px; }
 .flag.critical .flag-title { color: var(--critical-text); }
 .flag.warning .flag-title { color: var(--warning-text); }
-.flag-msg { color: var(--text-muted); font-size: 13px; margin-top: 5px; max-width: 82ch; }
+.flag-msg {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 6px;
+  /* Fill the flag card horizontally (no narrow reading column) and justify —
+     the "What to do" bullets read better as full-width paragraphs. */
+  text-align: justify;
+  /* Preserve the blank line between the description and "What to do:" that
+     translations emit as \n\n, without needing HTML markup in every message. */
+  white-space: pre-line;
+}
+.flag-msg strong { color: var(--text); }
+
+/* Bounce log: raw diagnostic wraps normally now (no truncate), so the full
+   provider message is visible without a hover — pair with a plain-language
+   help line underneath. */
+.bounce-diag { max-width: 60ch; }
+.bounce-diag .mono {
+  font-size: 12px; color: var(--text-muted);
+  word-break: break-word; white-space: normal;
+}
+.bounce-help {
+  margin-top: 4px; font-size: 12px; color: var(--text);
+  padding-left: 8px; border-left: 2px solid var(--lh-orange);
+}
+.flag-msg code {
+  background: var(--surface-3); color: var(--text);
+  padding: 1px 6px; border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+}
 .flag-src { color: var(--text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* --- Cards & charts ------------------------------------------------------ */

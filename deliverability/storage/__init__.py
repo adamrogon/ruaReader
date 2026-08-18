@@ -8,7 +8,6 @@ code.
 
 from .database import Database, get_database
 from .repositories import (
-    AcknowledgementRepository,
     BlacklistRepository,
     BounceRepository,
     DmarcRepository,
@@ -28,5 +27,4 @@ __all__ = [
     "IngestionRunRepository",
     "DomainConfigRepository",
     "MailboxConfigRepository",
-    "AcknowledgementRepository",
 ]

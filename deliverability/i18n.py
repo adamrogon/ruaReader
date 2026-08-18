@@ -250,13 +250,20 @@ MESSAGES: dict = {
         "en": "Sender blocked by {esp} ({count} rejection(s))",
     },
     "flag.sender_block.message": {
-        "pl": "{esp} odrzuca pocztę z tej domeny{codes_suffix}. To odrzucenie samego nadawcy, nie "
-        "pojedynczych adresów, więc dotyczy wszystkiego wysyłanego z tej domeny. Wstrzymaj wysyłkę "
-        "z tej domeny do wyjaśnienia sprawy i sprawdź, czy ten sam kod pojawia się u innych dostawców.",
+        "pl": "{esp} odrzuca pocztę z tej domeny{codes_suffix}. To odrzucenie samego nadawcy, "
+        "nie pojedynczych adresów, więc dotyczy wszystkiego wysyłanego z tej domeny.\n\n"
+        "**Co zrobić:** wstrzymaj wysyłkę z tej domeny na 24–48 h. Sprawdź w logu odbić poniżej "
+        "pełną treść odrzucenia — dostawca zwykle w niej pisze przyczynę (reputacja IP, treść, "
+        "brak uwierzytelnienia). Jeśli ten sam kod pojawia się u innych dostawców, problem jest "
+        "po Twojej stronie. Jeśli tylko u {esp} — zajrzyj do panelu tego dostawcy "
+        "(Google Postmaster Tools, Microsoft SNDS).",
         "en": "{esp} is refusing mail from this domain{codes_suffix}. This is a rejection of the "
-        "sender, not of individual addresses, so it affects everything sent from here. Stop "
-        "sending from this domain until it is resolved, and check whether the same code is "
-        "appearing at other providers.",
+        "sender, not of individual addresses, so it affects everything sent from here.\n\n"
+        "**What to do:** pause sending from this domain for 24–48 h. Read the full rejection in "
+        "the bounce log below — providers usually spell out the reason (IP reputation, content, "
+        "missing authentication). If the same code shows up at other providers too, the problem "
+        "is on your side. If it's only {esp}, check that provider's postmaster panel "
+        "(Google Postmaster Tools, Microsoft SNDS).",
     },
     "flag.sender_block.codes_suffix": {"pl": " z kodem {codes}", "en": " with {codes}"},
     "flag.sender_block.title_other": {
@@ -279,36 +286,63 @@ MESSAGES: dict = {
     },
     "flag.blacklist.detail_high_signal": {
         "pl": "{names} to lista, na którą dostawcy realnie reagują — spodziewaj się odrzucania lub "
-        "trafiania do spamu u użytkowników tego dostawcy. Zgłoś usunięcie z listy u operatora i "
-        "znajdź przyczynę, zanim wyślesz więcej.",
+        "trafiania do spamu u użytkowników tego dostawcy.\n\n"
+        "**Co zrobić:** wejdź na stronę operatora listy (np. spamhaus.org/lookup, "
+        "barracudacentral.org/rbl), wpisz IP i użyj formularza delisting. Zanim to zrobisz, znajdź "
+        "przyczynę — jeśli IP wciąż wysyła spam, delisting nic nie da, wróci na listę w ciągu godzin. "
+        "Sprawdź czy z tego IP nie wysyła inny klient/proces (najczęstsza przyczyna przy hostingu).",
         "en": "{names} is a list receivers act on directly — expect mail to this provider's users "
-        "to be rejected or junked. Request delisting with the operator and find what triggered it "
-        "before sending more.",
+        "to be rejected or junked.\n\n"
+        "**What to do:** go to the list operator's site (e.g. spamhaus.org/lookup, "
+        "barracudacentral.org/rbl), enter the IP and use their delisting form. Before you do, "
+        "find the cause — if the IP is still sending spam, delisting won't stick and you'll be "
+        "back on the list within hours. Check that no other client/process is sending from that IP "
+        "(the most common cause on shared hosting).",
     },
     "flag.blacklist.detail_netblock_wide": {
-        "pl": "Wszystkie te wpisy pochodzą z {names}, która listuje całe pule adresów/ASN, nie "
-        "pojedynczych nadawców. Zwykle odzwierciedla to sąsiadów u dostawcy hostingu, nie Twoją "
-        "wysyłkę, i większość dużych odbiorców tego nie uwzględnia. Warto zweryfikować na liście "
-        "typu Spamhaus, zanim uznasz to za przyczynę problemów z dostarczalnością.",
-        "en": "All of these listings are from {names}, which list whole netblocks or ASNs rather "
-        "than individual senders. That usually reflects the hosting provider's neighbours rather "
-        "than your own sending, and most large receivers do not act on them. Worth confirming "
-        "against a list like Spamhaus before treating it as the cause of a delivery problem.",
+        "pl": "Wszystkie te wpisy pochodzą z {names}, która listuje **całe pule adresów lub ASN**, "
+        "nie pojedynczych nadawców. Zwykle odzwierciedla to sąsiadów u dostawcy hostingu, nie Twoją "
+        "wysyłkę.\n\n"
+        "**Co zrobić:** zwykle **nic**. Większość dużych odbiorców (Google, Microsoft) tego nie "
+        "uwzględnia. Zanim ruszysz cokolwiek, sprawdź te IP na spamhaus.org/lookup i "
+        "mxtoolbox.com/blacklists — jeśli tam czysto, tę flagę można świadomie zignorować. Jeśli IP "
+        "należy do serwera www (nie skrzynki wysyłkowej), rozważ usunięcie mechanizmu **a** z "
+        "rekordu SPF — narzędzie przestanie sprawdzać ten adres.",
+        "en": "All of these listings are from {names}, which lists **whole netblocks or ASNs** "
+        "rather than individual senders. That usually reflects the hosting provider's neighbours "
+        "rather than your own sending.\n\n"
+        "**What to do:** usually **nothing**. Most large receivers (Google, Microsoft) do not act "
+        "on these lists. Cross-check the IPs at spamhaus.org/lookup and mxtoolbox.com/blacklists "
+        "— if they're clean there, you can consciously ignore this flag. If the IP belongs to a "
+        "web server (not your sending mailbox), consider removing the **a** mechanism from your "
+        "SPF record — the tool will stop checking that address.",
     },
     "flag.blacklist.detail_mixed": {
-        "pl": "Odbiorcy sprawdzający te listy mogą odrzucać lub filtrować pocztę z tego IP. Sprawdź, "
-        "o którą listę chodzi, zanim zaczniesz działać — mocno różnią się popularnością.",
-        "en": "Receivers consulting these lists may reject or junk mail from this IP. Check which "
-        "list is involved before acting — they vary a lot in how widely they are used.",
+        "pl": "Odbiorcy sprawdzający te listy mogą odrzucać lub filtrować pocztę z tego IP.\n\n"
+        "**Co zrobić:** sprawdź, o które listy chodzi — różnią się popularnością. Spamhaus, "
+        "Barracuda, SpamCop znaczą dużo. Mniejsze listy często można zignorować. Zacznij od "
+        "wpisania IP na mxtoolbox.com/blacklists — pokazuje szeroki przekrój i mówi, które są istotne.",
+        "en": "Receivers consulting these lists may reject or junk mail from this IP.\n\n"
+        "**What to do:** check which lists are involved — they vary widely in weight. Spamhaus, "
+        "Barracuda, SpamCop are significant. Smaller lists can often be ignored. Start by looking "
+        "up the IP at mxtoolbox.com/blacklists — it shows a broad set and flags which ones matter.",
     },
 
     # --- Flags: DNS ------------------------------------------------------------
     "flag.dns.no_spf.title": {"pl": "Brak rekordu SPF", "en": "No SPF record"},
     "flag.dns.no_spf.message": {
         "pl": "Ta domena nie publikuje rekordu SPF, więc odbiorcy nie mają listy autoryzowanych "
-        "nadawców. Poczta z niej dużo częściej trafia do filtrów.",
+        "nadawców. Poczta z niej dużo częściej trafia do filtrów.\n\n"
+        "**Co zrobić:** dodaj w DNS domeny rekord TXT wskazujący, przez kogo wysyłasz. Dla samego "
+        "Google Workspace: `v=spf1 include:_spf.google.com ~all`. Dla Microsoft 365: "
+        "`v=spf1 include:spf.protection.outlook.com ~all`. Jeśli używasz więcej dostawców — "
+        "wszystkie w jednym rekordzie oddzielone spacją. Propagacja to zwykle godziny.",
         "en": "This domain publishes no SPF record, so receivers have no list of authorised "
-        "senders. Mail from it is far more likely to be filtered.",
+        "senders. Mail from it is far more likely to be filtered.\n\n"
+        "**What to do:** add a TXT record on the domain naming who sends for you. For Google "
+        "Workspace alone: `v=spf1 include:_spf.google.com ~all`. For Microsoft 365: "
+        "`v=spf1 include:spf.protection.outlook.com ~all`. If you use several providers, list "
+        "all their includes separated by spaces in one record. Propagation is usually hours.",
     },
     "flag.dns.spf_over_limit.title": {
         "pl": "SPF przekracza limit zapytań DNS ({count}/{limit})",
@@ -316,43 +350,82 @@ MESSAGES: dict = {
     },
     "flag.dns.spf_over_limit.message": {
         "pl": "Ocena SPF wymaga {count} zapytań DNS, a limit z RFC to {limit}. Odbiorcy zwracają "
-        "permerror i traktują SPF jako niezaliczone, niezależnie od tego, jak poprawna jest reszta "
-        "rekordu. Usuń lub spłaszcz jeden z include.",
+        "**permerror** i traktują SPF jako niezaliczone, niezależnie od tego, jak poprawna jest "
+        "reszta rekordu.\n\n"
+        "**Co zrobić:** rozwiń każde `include:` na jego zawartość i sprawdź, który zjada najwięcej "
+        "(mxtoolbox.com/spf ma dobry visualizer). Usuń mechanizm `a` jeśli nie wysyłasz z serwera "
+        "www. Rozważ **SPF flattening** — narzędzia jak dmarcian albo EasyDMARC generują wersję z "
+        "wpisanymi `ip4:` zamiast `include:`, obniżając licznik do 0–1. To automatyzuje się cronem.",
         "en": "SPF evaluation needs {count} DNS lookups but the RFC limit is {limit}. Receivers "
-        "return permerror and treat SPF as failed, however correct the rest of the record is. "
-        "Remove or flatten an include.",
+        "return **permerror** and treat SPF as failed, however correct the rest of the record is.\n\n"
+        "**What to do:** expand each `include:` and see which costs the most (mxtoolbox.com/spf "
+        "has a good visualiser). Drop the `a` mechanism if you don't send from a web server. "
+        "Consider **SPF flattening** — tools like dmarcian or EasyDMARC generate a version with "
+        "explicit `ip4:` instead of `include:`, taking the count down to 0–1. Can be automated.",
     },
     "flag.dns.spf_near_limit.title": {
         "pl": "SPF blisko limitu zapytań ({count}/{limit})",
         "en": "SPF close to the lookup limit ({count}/{limit})",
     },
     "flag.dns.spf_near_limit.message": {
-        "pl": "SPF zużywa obecnie {count} z {limit} dozwolonych zapytań DNS. Dodanie kolejnej usługi "
-        "wysyłkowej prawdopodobnie to zepsuje.",
+        "pl": "SPF zużywa obecnie {count} z {limit} dozwolonych zapytań DNS. Dodanie kolejnej "
+        "usługi wysyłkowej prawdopodobnie to zepsuje.\n\n"
+        "**Co zrobić:** zanim dodasz kolejny `include:`, sprawdź czy któryś z obecnych nie jest "
+        "już nieużywany (stary dostawca, po którym nie posprzątano). Alternatywa jak wyżej — "
+        "**SPF flattening** obniża licznik prawie do zera.",
         "en": "SPF currently costs {count} of the {limit} permitted DNS lookups. Adding one more "
-        "sending service will likely break it.",
+        "sending service will likely break it.\n\n"
+        "**What to do:** before adding another `include:`, check whether any current one is stale "
+        "(a former provider not cleaned up). Alternative as above — **SPF flattening** takes the "
+        "count down to almost zero.",
     },
     "flag.dns.spf_error.title": {"pl": "Problem z rekordem SPF", "en": "SPF record problem"},
     "flag.dns.no_dmarc.title": {"pl": "Brak rekordu DMARC", "en": "No DMARC record"},
     "flag.dns.no_dmarc.message": {
-        "pl": "Bez rekordu DMARC nie powstają żadne raporty zbiorcze, więc ta domena jest niewidoczna "
-        "dla reszty tego narzędzia.",
+        "pl": "Bez rekordu DMARC nie powstają żadne raporty zbiorcze, więc ta domena jest "
+        "niewidoczna dla reszty tego narzędzia.\n\n"
+        "**Co zrobić:** dodaj w DNS domeny rekord TXT pod `_dmarc.<domena>`: "
+        "`v=DMARC1; p=none; rua=mailto:<Twoja skrzynka rua>`. Zacznij od `p=none` (tylko "
+        "monitorowanie), przez kilka tygodni obserwuj raporty, dopiero potem podnoś do "
+        "`quarantine` i `reject`. Podniesienie za wcześnie wyśle Twoją legalną pocztę do spamu.",
         "en": "Without a DMARC record no aggregate reports are produced, so this domain is "
-        "invisible to the rest of this tool.",
+        "invisible to the rest of this tool.\n\n"
+        "**What to do:** add a TXT record on the domain at `_dmarc.<domain>`: "
+        "`v=DMARC1; p=none; rua=mailto:<your rua mailbox>`. Start with `p=none` (monitor only), "
+        "watch reports for several weeks, then step up to `quarantine` and `reject`. Rushing this "
+        "will send your legitimate mail to spam.",
     },
     "flag.dns.dmarc_no_rua.title": {"pl": "DMARC bez adresu rua=", "en": "DMARC has no rua= address"},
     "flag.dns.dmarc_no_rua.message": {
-        "pl": "Rekord DMARC nie prosi o raporty zbiorcze, więc żadne dane nigdy nie napłyną dla tej "
-        "domeny.",
+        "pl": "Rekord DMARC nie prosi o raporty zbiorcze, więc żadne dane nigdy nie napłyną dla "
+        "tej domeny.\n\n"
+        "**Co zrobić:** dopisz do rekordu DMARC `rua=mailto:<skrzynka>` — najlepiej jedna centralna "
+        "skrzynka dla wszystkich Twoich domen (np. dmarc@<Twoja firma>). Jeśli skrzynka jest na "
+        "innej domenie niż ta wysyłkowa, musisz jeszcze na domenie skrzynki dodać rekord "
+        "autoryzacyjny: `<domena wysyłkowa>._report._dmarc.<domena skrzynki> TXT v=DMARC1` — bez "
+        "tego Google i Microsoft odmówią wysyłania raportów.",
         "en": "The DMARC record does not ask for aggregate reports, so no data will ever arrive "
-        "for this domain.",
+        "for this domain.\n\n"
+        "**What to do:** add `rua=mailto:<mailbox>` to the DMARC record — ideally one central "
+        "mailbox for all your domains (e.g. dmarc@<your company>). If the mailbox is on a "
+        "different domain than the sending one, add an authorisation record on the mailbox's "
+        "domain too: `<sending domain>._report._dmarc.<mailbox domain> TXT v=DMARC1` — without it "
+        "Google and Microsoft refuse to send reports.",
     },
     "flag.dns.dmarc_p_none.title": {"pl": "Polityka DMARC to p=none", "en": "DMARC policy is p=none"},
     "flag.dns.dmarc_p_none.message": {
-        "pl": "Raporty są zbierane, ale nic nie jest egzekwowane. To normalna pozycja monitorująca — "
-        "problem tylko wtedy, gdy zamierzano egzekwować politykę.",
-        "en": "Reports are collected but nothing is enforced. This is the normal monitoring "
-        "position — it is only a problem if you intended to enforce.",
+        "pl": "Raporty są zbierane, ale nic nie jest egzekwowane. **To normalna pozycja "
+        "monitorująca** — problem tylko wtedy, gdy zamierzano egzekwować politykę.\n\n"
+        "**Co zrobić:** jeśli Twoje SPF i DKIM od tygodni pokazują 95%+ zgodności w raportach, "
+        "podnieś do `p=quarantine; pct=25` (podejrzana poczta ląduje w spamie u 25% odbiorców). "
+        "Po tygodniu bez skarg → `pct=100`, potem `p=reject`. Jeśli zgodność jest niższa, zostaw "
+        "`p=none` i najpierw napraw uwierzytelnianie.",
+        "en": "Reports are collected but nothing is enforced. **This is the normal monitoring "
+        "position** — only a problem if you intended to enforce.\n\n"
+        "**What to do:** if your SPF and DKIM have been at 95%+ compliance in reports for weeks, "
+        "step up to `p=quarantine; pct=25` (suspicious mail goes to spam for 25% of receivers). "
+        "One week without complaints → `pct=100`, then `p=reject`. If compliance is lower, keep "
+        "`p=none` and fix authentication first.",
     },
     "flag.dns.dmarc_pct.title": {
         "pl": "DMARC obejmuje tylko {pct}% poczty",
@@ -360,9 +433,15 @@ MESSAGES: dict = {
     },
     "flag.dns.dmarc_pct.message": {
         "pl": "pct={pct} oznacza, że polityka jest stosowana do próbki. Wolumeny w raportach nie "
-        "odzwierciedlą całej wysyłki.",
+        "odzwierciedlą całej wysyłki.\n\n"
+        "**Co zrobić:** to jest OK tylko podczas rollout DMARC (świadomie idziesz 25% → 50% → 100%). "
+        "Jeśli utknąłeś tu na dłużej — podnieś do `pct=100`. Jeśli podnosisz i widzisz nagle "
+        "problemy — obniż z powrotem i napraw uwierzytelnianie zanim znowu ruszysz w górę.",
         "en": "pct={pct} means the policy is applied to a sample. Report volumes will not reflect "
-        "all of your sending.",
+        "all of your sending.\n\n"
+        "**What to do:** this is fine only during a DMARC rollout (deliberately going 25% → 50% "
+        "→ 100%). If you've been stuck here — step up to `pct=100`. If stepping up surfaces new "
+        "problems — step back down and fix authentication before trying again.",
     },
     "flag.dns.dkim_missing.title": {
         "pl": "Brak selektora DKIM: {selectors}",
@@ -370,11 +449,21 @@ MESSAGES: dict = {
     },
     "flag.dns.dkim_missing.message": {
         "pl": "Nie opublikowano klucza DKIM dla {selector_word}. Jeśli domena podpisuje nim "
-        "wiadomości, każda sygnatura nie przejdzie weryfikacji. Sprawdź nazwy selektorów w "
-        "config/domains.yml wobec Twojej platformy wysyłkowej.",
+        "wiadomości, każda sygnatura nie przejdzie weryfikacji.\n\n"
+        "**Co zrobić:** wejdź do panelu Twojej platformy wysyłkowej i sprawdź, jaki selektor "
+        "faktycznie generuje (Google Workspace: Panel admina → Aplikacje → Google Workspace → "
+        "Gmail → Uwierzytelnianie poczty; Microsoft 365: Defender → Zasady poczty → DKIM). Wpisz "
+        "**dokładną** nazwę selektora do Ustawień. Jeśli platforma używa domyślnej nazwy jak `google`, "
+        "`selector1` — a Ty jej nie masz w DNS — najprawdopodobniej DKIM nie jest w ogóle aktywny "
+        "u dostawcy, trzeba go włączyć.",
         "en": "No DKIM key is published for {selector_word}. If the domain is signing with it, "
-        "every signature will fail verification. Check the selector names in config/domains.yml "
-        "against your sending platform.",
+        "every signature will fail verification.\n\n"
+        "**What to do:** go into your sending platform's panel and check which selector it "
+        "actually generates (Google Workspace: Admin console → Apps → Google Workspace → Gmail → "
+        "Authenticate email; Microsoft 365: Defender → Email policies → DKIM). Enter the **exact** "
+        "selector name into Settings. If the platform uses a default name like `google` or "
+        "`selector1` — and you don't have it in DNS — DKIM most likely isn't enabled at the "
+        "provider at all, and you need to turn it on.",
     },
     "flag.dns.dkim_missing.selector_word_singular": {"pl": "tego selektora", "en": "this selector"},
     "flag.dns.dkim_missing.selector_word_plural": {"pl": "tych selektorów", "en": "these selectors"},
@@ -390,17 +479,35 @@ MESSAGES: dict = {
     },
     "flag.dns.dkim_revoked.title": {"pl": "Klucz DKIM odwołany: {selectors}", "en": "DKIM key revoked: {selectors}"},
     "flag.dns.dkim_revoked.message": {
-        "pl": "Selektor istnieje, ale publikuje pusty klucz, co jawnie go odwołuje. Sygnatury nim "
-        "wykonane nie przejdą weryfikacji.",
-        "en": "The selector exists but publishes an empty key, which explicitly revokes it. "
-        "Signatures made with it will fail.",
+        "pl": "Selektor istnieje, ale publikuje pusty klucz (`p=`), co jawnie go **odwołuje**. "
+        "Sygnatury nim wykonane nie przejdą weryfikacji.\n\n"
+        "**Co zrobić:** dwie możliwości. **Po pierwsze** — jeśli to celowe (rotacja klucza), usuń "
+        "ten selektor z Ustawień, żeby nie generował fałszywego alarmu. **Po drugie** — jeśli "
+        "spodziewałeś się, że klucz działa, wejdź do panelu platformy wysyłkowej i wygeneruj nowy. "
+        "To normalne, że stary selektor zostaje odwołany po rotacji (kiedy poczta go już nie "
+        "podpisuje) — dopóki żadna wiadomość go nie używa, można spokojnie usunąć wpis z DNS.",
+        "en": "The selector exists but publishes an empty key (`p=`), which explicitly **revokes** "
+        "it. Signatures made with it will fail.\n\n"
+        "**What to do:** two options. **First** — if this is deliberate (key rotation), remove "
+        "the selector from Settings so it stops raising a false alarm. **Second** — if you "
+        "expected the key to work, go into your sending platform's panel and generate a new one. "
+        "It's normal for an old selector to be revoked after rotation (once no mail is signing "
+        "with it) — as long as no message uses it, you can safely delete the DNS record.",
     },
     "flag.dns.no_mx.title": {"pl": "Brak rekordów MX", "en": "No MX records"},
     "flag.dns.no_mx.message": {
         "pl": "Ta domena w ogóle nie może odbierać poczty, co oznacza, że odbicia i odpowiedzi są "
-        "tracone.",
+        "tracone.\n\n"
+        "**Co zrobić:** dodaj rekord MX wskazujący na Twojego dostawcę poczty. Dla Google "
+        "Workspace: `1 SMTP.GOOGLE.COM`. Dla Microsoft 365: `1 <tenant>-com.mail.protection.outlook.com`. "
+        "Bez MX narzędzie nie zobaczy żadnych odbić, a raporty rua też mogą przestać przychodzić "
+        "(bo skrzynka rua nie istnieje).",
         "en": "This domain cannot receive mail at all, which means bounces and replies are being "
-        "lost.",
+        "lost.\n\n"
+        "**What to do:** add an MX record pointing to your mail provider. For Google Workspace: "
+        "`1 SMTP.GOOGLE.COM`. For Microsoft 365: `1 <tenant>-com.mail.protection.outlook.com`. "
+        "Without MX the tool won't see any bounces, and rua reports may stop arriving too (the "
+        "rua mailbox has nowhere to live).",
     },
 
     # --- Flags: bounce ----------------------------------------------------------
@@ -410,11 +517,21 @@ MESSAGES: dict = {
     },
     "flag.bounce.hard_rate_critical.message": {
         "pl": "{hard} z ok. {sent} wiadomości odbiło się trwale. Powyżej {threshold:.0%} dostawcy "
-        "zaczynają traktować nadawcę jako problem jakości listy, co szkodzi reputacji każdej domeny, "
-        "z której wysyłasz. Wyczyść listę przed kontynuowaniem.",
+        "zaczynają traktować nadawcę jako problem jakości listy, co szkodzi reputacji **każdej** "
+        "domeny, z której wysyłasz — nie tylko tej.\n\n"
+        "**Co zrobić:** wstrzymaj wysyłkę z tej domeny. Wejdź do logu odbić poniżej i wyeksportuj "
+        "adresy z kodami `5.1.1`, `5.1.2`, `5.1.10` (nieistniejące adresy) — te usuń z listy "
+        "kontaktów u źródła. Jeśli lista pochodzi z scrapowania, użyj weryfikatora "
+        "(np. NeverBounce, ZeroBounce) przed następną kampanią. Wróć do wysyłki po tygodniu bez "
+        "nowych twardych odbić.",
         "en": "{hard} of roughly {sent} messages bounced permanently. Above {threshold:.0%} "
         "providers start treating the sender as a list-quality problem, which damages reputation "
-        "for every domain you send from. Clean the list before continuing.",
+        "for **every** domain you send from — not just this one.\n\n"
+        "**What to do:** pause sending from this domain. Go into the bounce log below and export "
+        "addresses with codes `5.1.1`, `5.1.2`, `5.1.10` (non-existent addresses) — remove them "
+        "from your source list. If the list comes from scraping, run it through a verifier "
+        "(NeverBounce, ZeroBounce) before the next campaign. Resume sending after a week with no "
+        "new hard bounces.",
     },
     "flag.bounce.hard_rate_warning.title": {
         "pl": "Wskaźnik twardych odbić {rate:.1%}",
@@ -422,34 +539,56 @@ MESSAGES: dict = {
     },
     "flag.bounce.hard_rate_warning.message": {
         "pl": "{hard} z ok. {sent} wiadomości odbiło się trwale. To powyżej poziomu {threshold:.0%}, "
-        "od którego dostawcy zaczynają zwracać uwagę. Zwykle to nieaktualna lista, nie zablokowana "
-        "domena.",
+        "od którego dostawcy zaczynają zwracać uwagę. **Zwykle to nieaktualna lista**, nie "
+        "zablokowana domena.\n\n"
+        "**Co zrobić:** przejrzyj log odbić poniżej — kody `5.1.1`/`5.1.2` to nieistniejące "
+        "adresy do usunięcia. Nie musisz jeszcze wstrzymywać wysyłki, ale jeśli w kolejnych 3–4 "
+        "dniach wskaźnik rośnie zamiast spadać, potraktuj to tak jak poziom krytyczny.",
         "en": "{hard} of roughly {sent} messages bounced permanently. This is above the "
-        "{threshold:.0%} level where providers begin to notice. Usually a stale list rather than "
-        "a blocked domain.",
+        "{threshold:.0%} level where providers begin to notice. **Usually a stale list**, not "
+        "a blocked domain.\n\n"
+        "**What to do:** review the bounce log below — `5.1.1`/`5.1.2` codes are non-existent "
+        "addresses to remove. No need to pause yet, but if the rate keeps climbing over the next "
+        "3–4 days, treat it like the critical level.",
     },
     "flag.bounce.unparsed.title": {
         "pl": "{count} odbić nie udało się przetworzyć",
         "en": "{count} bounce(s) could not be parsed",
     },
     "flag.bounce.unparsed.message": {
-        "pl": "Te wiadomości wyglądały na odbicia, ale nie zawierały czytelnego kodu statusu. Ich "
-        "pełna treść została zapisana — warto zerknąć, bo niestandardowe odbicia czasem są tym, jak "
-        "dostawca zgłasza blokadę.",
+        "pl": "Te wiadomości wyglądały na odbicia, ale nie zawierały czytelnego kodu statusu. "
+        "Ich pełna treść została zapisana.\n\n"
+        "**Co zrobić:** w logu odbić poniżej te wpisy mają w kolumnie Rozpoznano wartość 'nie'. "
+        "Zerknij, bo niestandardowe odbicia czasem są tym, jak dostawca zgłasza blokadę bez "
+        "użycia standardowych kodów SMTP.",
         "en": "These messages looked like bounces but carried no readable status code. Their full "
-        "text has been stored — worth a look, since non-standard bounces are sometimes how a "
-        "provider reports a block.",
+        "text has been stored.\n\n"
+        "**What to do:** in the bounce log below these entries show 'no' in the Parsed column. "
+        "Take a look — non-standard bounces are sometimes how a provider reports a block without "
+        "using standard SMTP codes.",
     },
 
     # --- Flags: DMARC compliance --------------------------------------------
     "flag.rua.low_compliance.title": {"pl": "Zgodność DMARC {rate:.1%}", "en": "DMARC compliance {rate:.1%}"},
     "flag.rua.low_compliance.message": {
         "pl": "{failed} z {evaluated} ocenionych wiadomości nie przeszło ani SPF, ani DKIM w "
-        "dopasowaniu{worst_suffix}. Przekierowana poczta ({forwarded} wiadomości) jest już wyłączona, "
-        "więc to prawdziwy błąd uwierzytelniania, nie przekierowanie.",
+        "dopasowaniu{worst_suffix}. Przekierowana poczta ({forwarded} wiadomości) jest już "
+        "wyłączona, więc to prawdziwy błąd uwierzytelniania, nie przekierowanie.\n\n"
+        "**Co zrobić:** spójrz na tabelę Źródła z największym wolumenem błędów niżej — pokaże "
+        "konkretne adresy IP wysyłające jako Ta domena, ale bez ważnego SPF/DKIM. Trzy typowe "
+        "przyczyny: **(1)** stary dostawca (np. Mailchimp) którego usunięto, ale konto dalej próbuje "
+        "wysyłać — cofnij dostęp u dostawcy; **(2)** brakujący `include:` w SPF dla legalnego "
+        "nowego dostawcy — dodaj; **(3)** ktoś podszywa się pod Twoją domenę — jeśli IP są spoza "
+        "Twoich znanych dostawców, prawdopodobnie spam z sfałszowanym Twoim adresem.",
         "en": "{failed} of {evaluated} evaluated messages failed both SPF and DKIM alignment"
         "{worst_suffix}. Forwarded mail ({forwarded} messages) is already excluded, so this is "
-        "genuine authentication failure rather than relaying.",
+        "genuine authentication failure rather than relaying.\n\n"
+        "**What to do:** look at the 'Highest-volume failing sources' table below — it shows "
+        "specific IPs sending as this domain without valid SPF/DKIM. Three common causes: "
+        "**(1)** a former provider (e.g. Mailchimp) that was removed but the account is still "
+        "trying — revoke the account at the provider; **(2)** a missing `include:` in SPF for a "
+        "legitimate new provider — add it; **(3)** someone spoofing your domain — if the IPs "
+        "aren't from any of your known providers, likely spam forging your address.",
     },
     "flag.rua.low_compliance.worst_suffix": {
         "pl": ", głównie widziane przez {esp}",
@@ -457,11 +596,18 @@ MESSAGES: dict = {
     },
     "flag.rua.no_data.title": {"pl": "Brak danych z raportów DMARC", "en": "No DMARC report data"},
     "flag.rua.no_data.message": {
-        "pl": "W wybranym zakresie nie napłynęły żadne raporty zbiorcze dla tej domeny. Albo nic z "
-        "niej nie wysyłasz, albo jej adres rua= nie wskazuje na skrzynkę odczytywaną przez to "
-        "narzędzie.",
-        "en": "No aggregate reports have arrived for this domain in the selected window. Either it "
-        "is not sending, or its DMARC rua= address is not pointing at a mailbox this tool reads.",
+        "pl": "W wybranym zakresie nie napłynęły żadne raporty zbiorcze dla tej domeny.\n\n"
+        "**Co zrobić:** sprawdź trzy rzeczy. **(1)** Czy z tej domeny w ogóle coś wysyłasz — jeśli "
+        "nie, flaga jest bezpodstawna, można ją zignorować. **(2)** Czy domena ma rekord DMARC "
+        "z `rua=` (patrz sekcja Rekordy DNS niżej). **(3)** Czy skrzynka wskazana w `rua=` jest "
+        "dodana w Ustawieniach i pobiera pocztę bez błędów. Pamiętaj że raporty rua przychodzą "
+        "z opóźnieniem 24–48 h — widok 1-dniowy prawie zawsze będzie pusty.",
+        "en": "No aggregate reports have arrived for this domain in the selected window.\n\n"
+        "**What to do:** check three things. **(1)** Do you actually send from this domain — if "
+        "not, the flag is spurious, ignore it. **(2)** Does the domain have a DMARC record with "
+        "`rua=` (see DNS records below). **(3)** Is the mailbox in `rua=` added in Settings and "
+        "fetching without errors. Remember rua reports arrive with 24–48 h latency — the 1-day "
+        "view will almost always be empty.",
     },
 
     # --- Headline (one-sentence answer) --------------------------------------
@@ -682,22 +828,83 @@ MESSAGES: dict = {
         "en": "A {stream} check is already running.",
     },
 
-    # --- Acknowledgement ------------------------------------------------------
-    "ack.button": {"pl": "Oznacz jako obsłużone", "en": "Mark as handled"},
-    "ack.undo": {"pl": "Cofnij", "en": "Undo"},
-    "ack.marked": {"pl": "Obsłużone", "en": "Handled"},
-    "ack.marked_at": {"pl": "oznaczone {when}", "en": "marked {when}"},
-    "ack.note_placeholder": {
-        "pl": "notatka opcjonalnie, np. czekam na delisting",
-        "en": "optional note, e.g. waiting for delisting",
+    # --- Bounce log table (domain page) ---------------------------------------
+    "section.bounce_log": {"pl": "Log odbić", "en": "Bounce log"},
+    "section.bounce_log_hint": {
+        "pl": "surowe wpisy do weryfikacji ręcznej w skrzynce",
+        "en": "raw entries, for manual cross-checking against the mailbox",
     },
-    "ack.explainer": {
-        "pl": "Obsłużone flagi nie podbijają domeny na górę listy, ale zostają widoczne. "
-        "Jeśli problem wystąpi ponownie, oznaczenie samo się cofnie.",
-        "en": "Handled flags stop pushing a domain up the list but stay visible. "
-        "If the problem happens again, the mark clears itself.",
+    "table.received_at": {"pl": "Otrzymano", "en": "Received"},
+    "table.mailbox": {"pl": "Skrzynka", "en": "Mailbox"},
+    "table.recipient_domain": {"pl": "Domena odbiorcy", "en": "Recipient domain"},
+    "table.parsed": {"pl": "Rozpoznano", "en": "Parsed"},
+    "table.yes": {"pl": "tak", "en": "yes"},
+    "table.no": {"pl": "nie", "en": "no"},
+
+    # --- One-line, human help for individual bounce codes ---------------------
+    # Rendered inline under each bounce diagnostic in the log, so the user can
+    # tell at a glance what the SMTP jargon means without having to look it up.
+    # Only common codes here; anything else falls back to no extra help line,
+    # which is fine — the raw diagnostic is still visible next to it.
+    "bounce.code_help.5.1.1": {
+        "pl": "Adres odbiorcy nie istnieje — usuń z listy.",
+        "en": "Recipient address does not exist — remove from list.",
     },
-    "ack.section": {"pl": "Obsłużone", "en": "Handled"},
+    "bounce.code_help.5.1.2": {
+        "pl": "Domena odbiorcy nie istnieje lub nie ma serwera poczty — literówka w domenie?",
+        "en": "Recipient domain does not exist or has no mail server — typo in the domain?",
+    },
+    "bounce.code_help.5.1.3": {
+        "pl": "Adres źle skonstruowany.",
+        "en": "Malformed recipient address.",
+    },
+    "bounce.code_help.5.1.6": {"pl": "Skrzynka przeniesiona, brak forwardowania.", "en": "Mailbox moved, no forwarding."},
+    "bounce.code_help.5.1.10": {"pl": "Adres nierozwiązywalny — usuń.", "en": "Address does not resolve — remove."},
+    "bounce.code_help.5.2.1": {"pl": "Skrzynka wyłączona.", "en": "Mailbox is disabled."},
+    "bounce.code_help.5.2.2": {"pl": "Skrzynka pełna (mimo kodu 5.x.x zwykle temporary).", "en": "Mailbox full (usually temporary despite 5.x.x)."},
+    "bounce.code_help.5.4.4": {
+        "pl": "Serwer odbiorcy nie odpowiada — problem po ich stronie.",
+        "en": "Recipient server not reachable — their side.",
+    },
+    "bounce.code_help.5.7.0": {
+        "pl": "Odrzucone przez politykę — najczęściej reputacja lub treść. Sprawdź pełną treść diagnostyki.",
+        "en": "Rejected by policy — usually reputation or content. Check the full diagnostic.",
+    },
+    "bounce.code_help.5.7.1": {
+        "pl": "Odrzucone przez politykę — może być blokada reputacji, ale też loop, whitelist, "
+        "relay denied. Zawsze sprawdź treść diagnostyki obok.",
+        "en": "Rejected by policy — could be a reputation block, but also a loop, whitelist, or "
+        "'relay denied'. Always check the diagnostic next to it.",
+    },
+    "bounce.code_help.5.7.708": {
+        "pl": "Microsoft: cały zakres IP zablokowany za reputację.",
+        "en": "Microsoft: whole IP range blocked on reputation.",
+    },
+    "bounce.code_help.5.7.509": {"pl": "Nieprzeszły DMARC u odbiorcy.", "en": "DMARC failed at receiver."},
+    "bounce.code_help.5.7.23": {"pl": "Nieprzeszły SPF u odbiorcy.", "en": "SPF failed at receiver."},
+    "bounce.code_help.5.7.26": {"pl": "Nieprzeszły SPF **i** DKIM — napraw uwierzytelnianie.", "en": "SPF **and** DKIM failed — fix authentication."},
+    "bounce.code_help.5.0.0": {"pl": "Ogólny błąd trwały — patrz diagnostyka.", "en": "Generic permanent error — see diagnostic."},
+    "bounce.code_help.4.2.2": {"pl": "Skrzynka pełna — może się zwolnić.", "en": "Mailbox full — may clear on its own."},
+    "bounce.code_help.4.3.2": {"pl": "Serwer odbiorcy chwilowo nie przyjmuje.", "en": "Recipient server temporarily not accepting."},
+    "bounce.code_help.4.4.1": {
+        "pl": "Serwer odbiorcy nie odpowiada — chwilowy problem po ich stronie.",
+        "en": "Recipient server not responding — temporary, their side.",
+    },
+    "bounce.code_help.4.4.2": {"pl": "Połączenie zerwane w trakcie doręczania.", "en": "Connection dropped mid-delivery."},
+    "bounce.code_help.4.4.4": {
+        "pl": "Odbiorca dostał wiadomość jako nieuwierzytelnioną — u nich brakuje konfiguracji dla ich tenanta.",
+        "en": "Recipient got the message as unauthenticated — their tenant is misconfigured.",
+    },
+    "bounce.code_help.4.7.1": {
+        "pl": "Chwilowo odrzucone przez politykę — greylisting lub limit. Uważaj, powtórzenia często "
+        "przechodzą w 5.7.x.",
+        "en": "Temporarily refused by policy — greylisting or a rate limit. Watch out, repeats "
+        "often turn into 5.7.x.",
+    },
+    "bounce.code_help.4.7.0": {
+        "pl": "Chwilowo odroczone na tle reputacji.",
+        "en": "Temporarily deferred on reputation grounds.",
+    },
 
     # --- Domain consistency between the three places -------------------------
     "field.sending_domain_hint": {
