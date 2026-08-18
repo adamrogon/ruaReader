@@ -154,6 +154,21 @@ MESSAGES: dict = {
         "en": "rejections of the domain, not of individual addresses",
     },
     "section.bounce_codes": {"pl": "Kody odbić", "en": "Bounce codes"},
+    "section.bounce_summary": {
+        "pl": "Podsumowanie odbić",
+        "en": "Bounce summary",
+    },
+    "section.bounce_summary_hint": {
+        "pl": "jedna pozycja na każdą kombinację kodu, klasy i dostawcy — od najczęstszych",
+        "en": "one row per code+class+provider combination — most frequent first",
+    },
+    "table.latest": {"pl": "Ostatnio", "en": "Latest"},
+    "pager.showing": {
+        "pl": "Strona {page} z {total_pages} · {total} wpisów łącznie",
+        "en": "Page {page} of {total_pages} · {total} entries total",
+    },
+    "pager.prev": {"pl": "‹ Poprzednia", "en": "‹ Previous"},
+    "pager.next": {"pl": "Następna ›", "en": "Next ›"},
     "section.dns_records": {"pl": "Rekordy DNS", "en": "DNS records"},
     "section.dns_checked_at": {"pl": "sprawdzono {when}", "en": "checked {when}"},
     "section.failing_sources": {

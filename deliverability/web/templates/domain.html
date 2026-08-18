@@ -129,48 +129,37 @@
   </div>
 </div>
 
-{# --- Sender blocks, called out separately -------------------------------- #}
-{% if sender_blocks %}
-  <h2>{{ t('section.sender_blocks') }} <span class="hint">{{ t('section.sender_blocks_hint') }}</span></h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>{{ t('table.when') }}</th><th style="text-align:left">{{ t('table.code') }}</th><th style="text-align:left">{{ t('table.provider') }}</th><th style="text-align:left">{{ t('table.diagnostic') }}</th></tr>
-      </thead>
-      <tbody>
-        {% for row in sender_blocks %}
-          <tr>
-            <td>{{ row.received_at.strftime('%Y-%m-%d %H:%M') if row.received_at else '—' }}</td>
-            <td style="text-align:left"><span class="badge critical">{{ row.status_code or '—' }}</span></td>
-            <td style="text-align:left">{{ row.recipient_esp or '—' }}</td>
-            <td style="text-align:left" class="mono truncate">{{ row.diagnostic_code or '—' }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% endif %}
-
-{# --- Bounce codes -------------------------------------------------------- #}
-<h2>{{ t('section.bounce_codes') }}</h2>
+{# --- Consolidated bounce summary: one row per (code, class, provider) --- #}
+{# Replaces the old separate "Sender blocks" and "Bounce codes" panels — same
+   information, in one table sorted by how often each signature has arrived. #}
+<h2>{{ t('section.bounce_summary') }} <span class="hint">{{ t('section.bounce_summary_hint') }}</span></h2>
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th style="text-align:left">{{ t('table.code') }}</th><th style="text-align:left">{{ t('table.class') }}</th><th>{{ t('table.count') }}</th></tr>
+      <tr>
+        <th style="text-align:left">{{ t('table.latest') }}</th>
+        <th style="text-align:left">{{ t('table.code') }}</th>
+        <th style="text-align:left">{{ t('table.class') }}</th>
+        <th style="text-align:left">{{ t('table.provider') }}</th>
+        <th style="text-align:left">{{ t('table.diagnostic') }}</th>
+        <th>{{ t('table.count') }}</th>
+      </tr>
     </thead>
     <tbody>
-      {% for row in bounce_codes %}
+      {% for row in bounce_summary %}
         <tr>
-          <td style="text-align:left" class="mono">{{ row.status_code or t('table.unparsed') }}</td>
-          <td style="text-align:left">
-            <span class="badge {{ 'critical' if row.bounce_class == 'sender_block' else ('warning' if row.bounce_class == 'hard' else 'neutral') }}">
-              {{ t('bounce_class.' ~ row.bounce_class) }}
-            </span>
+          <td style="text-align:left" class="mono">{{ row.latest.strftime('%Y-%m-%d %H:%M') if row.latest else '—' }}</td>
+          <td style="text-align:left"><span class="badge {{ 'critical' if row.bounce_class == 'sender_block' else ('warning' if row.bounce_class == 'hard' else 'neutral') }}">{{ row.status_code or t('table.unparsed') }}</span></td>
+          <td style="text-align:left">{{ t('bounce_class.' ~ row.bounce_class) }}</td>
+          <td style="text-align:left">{{ row.esp or '—' }}</td>
+          <td style="text-align:left" class="bounce-diag">
+            <div class="mono">{{ row.sample_diagnostic or '—' }}</div>
+            {% if row.code_help %}<div class="bounce-help">{{ row.code_help }}</div>{% endif %}
           </td>
-          <td>{{ row.count }}</td>
+          <td><strong>{{ row.count }}</strong></td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="empty">{{ t('empty.no_bounces') }}</td></tr>
+        <tr><td colspan="6" class="empty">{{ t('empty.no_bounces') }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -258,7 +247,7 @@
 {# The "Mailbox" column is dropped: this whole table is filtered by the
    current domain, and each domain has one bounce mailbox, so the value would
    be identical on every row. Freed width goes to the diagnostic + help. #}
-<h2>{{ t('section.bounce_log') }} <span class="hint">{{ t('section.bounce_log_hint') }}</span></h2>
+<h2 id="bounce-log">{{ t('section.bounce_log') }} <span class="hint">{{ t('section.bounce_log_hint') }}</span></h2>
 <div class="table-wrap">
   <table>
     <thead>
@@ -294,6 +283,30 @@
     </tbody>
   </table>
 </div>
+
+{# Pager only if there is more than a page's worth of history. Preserves lang
+   and days on every link, and jumps back to #bounce-log so the reader stays
+   in the log instead of the browser scrolling to the top of the page. #}
+{% if bounce_pagination.total_pages > 1 %}
+  {% set base = '/domain/' ~ domain ~ '?lang=' ~ lang ~ '&days=' ~ days %}
+  <div class="pager">
+    <span class="pager-meta">{{ t('pager.showing',
+      page=bounce_pagination.current, total_pages=bounce_pagination.total_pages,
+      total=bounce_pagination.total) }}</span>
+    <span class="pager-controls">
+      {% if bounce_pagination.has_prev %}
+        <a class="btn btn-ghost btn-sm" href="{{ base }}&bounce_page={{ bounce_pagination.current - 1 }}#bounce-log">{{ t('pager.prev') }}</a>
+      {% else %}
+        <span class="btn btn-ghost btn-sm" style="opacity:0.35; cursor:default">{{ t('pager.prev') }}</span>
+      {% endif %}
+      {% if bounce_pagination.has_next %}
+        <a class="btn btn-ghost btn-sm" href="{{ base }}&bounce_page={{ bounce_pagination.current + 1 }}#bounce-log">{{ t('pager.next') }}</a>
+      {% else %}
+        <span class="btn btn-ghost btn-sm" style="opacity:0.35; cursor:default">{{ t('pager.next') }}</span>
+      {% endif %}
+    </span>
+  </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

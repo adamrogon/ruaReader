@@ -461,6 +461,73 @@ class BounceRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def summary_by_code(
+        self, since: dt.datetime, domain: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """One row per (code, class, provider) with count and latest evidence.
+
+        Used to fold the old ``sender_blocks`` and ``counts_by_code`` tables
+        into a single "what's actually happening" table. Sorted by count DESC
+        so the loudest problem is on top.
+        """
+        conditions = [
+            bounces.c.project_id == self.project_id,
+            bounces.c.received_at >= since,
+        ]
+        if domain:
+            conditions.append(bounces.c.sending_domain == domain)
+
+        stmt = (
+            select(
+                bounces.c.status_code,
+                bounces.c.bounce_class,
+                bounces.c.recipient_esp.label("esp"),
+                func.count(bounces.c.id).label("count"),
+                func.max(bounces.c.received_at).label("latest"),
+                # SQLite tolerates non-aggregated columns in GROUP BY and picks
+                # an arbitrary value — good enough for a "sample diagnostic".
+                bounces.c.diagnostic_code.label("sample_diagnostic"),
+            )
+            .where(and_(*conditions))
+            .group_by(bounces.c.status_code, bounces.c.bounce_class, bounces.c.recipient_esp)
+            .order_by(desc("count"), desc("latest"))
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def recent_paged(
+        self,
+        since: dt.datetime,
+        domain: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 10,
+    ) -> Dict[str, Any]:
+        """One page of recent bounces plus the total count for pager arithmetic.
+
+        Server-side pagination — the underlying log grows unbounded, and
+        rendering the whole thing every request would get slow well before
+        the browser would notice.
+        """
+        conditions = [
+            bounces.c.project_id == self.project_id,
+            bounces.c.received_at >= since,
+        ]
+        if domain:
+            conditions.append(bounces.c.sending_domain == domain)
+
+        total_stmt = select(func.count()).select_from(bounces).where(and_(*conditions))
+        page_stmt = (
+            select(bounces)
+            .where(and_(*conditions))
+            .order_by(desc(bounces.c.received_at))
+            .limit(per_page)
+            .offset(max(0, (page - 1)) * per_page)
+        )
+        with self.db.connect() as conn:
+            total = int(conn.execute(total_stmt).scalar() or 0)
+            rows = _rows(conn.execute(page_stmt))
+        return {"rows": rows, "total": total, "page": max(1, page), "per_page": per_page}
+
     def latest_per_domain(self, since: dt.datetime) -> List[Dict[str, Any]]:
         """Timestamp of the most recent bounce per domain.
 

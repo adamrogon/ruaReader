@@ -46,15 +46,21 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 def _bold_markers(text: str) -> "Any":
-    """Turn markdown-ish markers in translated strings into inline HTML.
+    """Turn markdown-ish markers in translated strings into inline HTML,
+    and split "description" from "what to do" into two paragraphs.
 
-    ``**bold**`` becomes ``<strong>bold</strong>`` and `` `code` `` becomes
-    ``<code>code</code>``. Runs AFTER Jinja/markupsafe has escaped the
-    rendered string, so any HTML that leaked into a parameter (a mailbox name
-    someone typed, a diagnostic string from a mail server) has already been
-    neutralised — only the literal ``**`` and `` ` `` markers, which the
-    escaper leaves alone, are turned into tags. That is what makes it safe to
-    mark the result with :func:`Markup` here.
+    Every flag message is one description paragraph, optionally followed by a
+    ``\\n\\n``-separated "what to do" paragraph. Rendering both as one blob of
+    ``pre-line`` text worked, but the two roles blurred into each other; a
+    second ``<p>`` with its own class (with the callout tint added in CSS)
+    turns them into visually separate blocks — same content, clearer purpose.
+
+    Runs AFTER Jinja/markupsafe has escaped the rendered string, so any HTML
+    that leaked into a parameter (a mailbox name someone typed, a diagnostic
+    string from a mail server) has already been neutralised — only the literal
+    ``**`` and `` ` `` markers, which the escaper leaves alone, are turned
+    into tags. That is what makes it safe to mark the result with
+    :func:`Markup` here.
     """
     import re
 
@@ -63,10 +69,38 @@ def _bold_markers(text: str) -> "Any":
     result = str(escape(text))
     result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
     result = re.sub(r"`([^`]+?)`", r"<code>\1</code>", result)
-    return Markup(result)
+
+    # Split on the first blank line: everything before is the description,
+    # everything after is the action. maxsplit=1 keeps subsequent \n\n as
+    # literal breaks in the action paragraph (rare, but preserved).
+    parts = re.split(r"\n{2,}", result, maxsplit=1)
+    if len(parts) == 2:
+        html = f'<p class="flag-desc">{parts[0].strip()}</p>' \
+               f'<p class="flag-action">{parts[1].strip()}</p>'
+    else:
+        html = f'<p class="flag-desc">{parts[0].strip()}</p>'
+    return Markup(html)
 
 
 templates.env.filters["bold_markers"] = _bold_markers
+
+
+def _static_version() -> str:
+    """Modtime-based cache-buster for the stylesheet URL.
+
+    Browsers were caching the CSS aggressively across every restart. Appending
+    ``?v=<mtime>`` to the ``<link>`` href forces a fresh fetch whenever the
+    file actually changes, and — importantly — costs the browser nothing when
+    the file has NOT changed (the URL is identical, so its cache hit still
+    works). Computed on import, which is fine for a local single-user app.
+    """
+    try:
+        return str(int((BASE_DIR / "static" / "style.css").stat().st_mtime))
+    except OSError:
+        return "0"
+
+
+templates.env.globals["static_version"] = _static_version()
 
 
 def _bounce_code_help(code: Optional[str], lang: str) -> str:
@@ -197,7 +231,12 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
 
 
 @app.get("/domain/{domain}")
-def domain_detail(request: Request, domain: str, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)):
+def domain_detail(
+    request: Request,
+    domain: str,
+    days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90),
+    bounce_page: int = Query(1, ge=1, le=10_000),
+):
     lang = _resolve_request_lang(request)
     ctx = _context()
     settings, database = ctx["settings"], ctx["database"]
@@ -213,6 +252,29 @@ def domain_detail(request: Request, domain: str, days: int = Query(DEFAULT_WINDO
     bounce_repo = BounceRepository(database, settings.project_id)
     since = _since(days)
 
+    # Consolidated "what's actually happening" table — folds the old separate
+    # "sender blocks" and "bounce codes" panels into one row-per-signature
+    # summary, each with a live sample of the diagnostic text so the SMTP
+    # jargon isn't the only thing on the row.
+    bounce_summary_rows = bounce_repo.summary_by_code(since, domain)
+    bounce_summary = [
+        dict(row, code_help=_bounce_code_help(row["status_code"], lang))
+        for row in bounce_summary_rows
+    ]
+
+    # Paginated raw log — 10 per page keeps the domain page short even after
+    # weeks of ingestion, and pager arithmetic runs server-side against the
+    # real row count rather than being guessed from an over-fetched list.
+    per_page = 10
+    page_data = bounce_repo.recent_paged(since, domain, page=bounce_page, per_page=per_page)
+    recent_bounces = [
+        dict(r, code_help=_bounce_code_help(r["status_code"], lang))
+        for r in page_data["rows"]
+    ]
+    total = page_data["total"]
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    current_page = min(page_data["page"], total_pages)
+
     return _render(
         request,
         "domain.html",
@@ -221,16 +283,16 @@ def domain_detail(request: Request, domain: str, days: int = Query(DEFAULT_WINDO
             "status": status,
             "domain": domain,
             "dns": dns_row,
-            "bounce_codes": bounce_repo.counts_by_code(since, domain),
-            # Enrich each bounce with a plain-language one-liner for its SMTP
-            # code, so the log tells the user what the jargon means without a
-            # lookup elsewhere. Resolved here (not in the template) so a code
-            # with no help entry becomes an empty string, not a bare key.
-            "recent_bounces": [
-                dict(r, code_help=_bounce_code_help(r["status_code"], lang))
-                for r in bounce_repo.recent(since, domain, limit=40)
-            ],
-            "sender_blocks": bounce_repo.sender_blocks(since, domain),
+            "bounce_summary": bounce_summary,
+            "recent_bounces": recent_bounces,
+            "bounce_pagination": {
+                "current": current_page,
+                "total_pages": total_pages,
+                "total": total,
+                "per_page": per_page,
+                "has_prev": current_page > 1,
+                "has_next": current_page < total_pages,
+            },
             "top_failing": DmarcRepository(database, settings.project_id).top_failing_sources(
                 since, domain, limit=12
             ),
