@@ -81,6 +81,7 @@ MESSAGES: dict = {
     },
     "section.trends": {"pl": "Trendy", "en": "Trends"},
     "filter.all_domains": {"pl": "Wszystkie domeny", "en": "All domains"},
+    "filter.pick_domains": {"pl": "Wybierz domeny", "en": "Pick domains"},
 
     "table.provider": {"pl": "Dostawca", "en": "Provider"},
     "table.messages": {"pl": "Wiadomości", "en": "Messages"},

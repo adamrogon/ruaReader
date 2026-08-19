@@ -186,9 +186,14 @@
 {% if statuses %}
   <div class="domain-filter" id="domain-filter">
     <label><input type="checkbox" class="js-domain-all" checked> <strong>{{ t('filter.all_domains') }}</strong></label>
-    {% for status in statuses %}
-      <label><input type="checkbox" class="js-domain-toggle" value="{{ status.domain }}" checked> {{ status.domain }}</label>
-    {% endfor %}
+    <details class="domain-filter-toggle">
+      <summary><span class="js-domain-filter-summary">{{ t('filter.pick_domains') }}</span></summary>
+      <div class="domain-filter-list">
+        {% for status in statuses %}
+          <label><input type="checkbox" class="js-domain-toggle" value="{{ status.domain }}" checked> {{ status.domain }}</label>
+        {% endfor %}
+      </div>
+    </details>
   </div>
 {% endif %}
 <div class="grid-2">
@@ -336,14 +341,18 @@ function loadBounceChart(domains) {
   });
 }
 
-// Domain filter: "all" master checkbox plus one per domain. Checking every
-// individual box (or "all") is treated as "no filter" so the API call omits
-// domain= entirely rather than listing every domain explicitly.
+// Domain filter: "all" master checkbox plus a collapsible picker for
+// individual domains (a flat row of 30+ checkboxes doesn't scale). Checking
+// every individual box (or "all") is treated as "no filter" so the API call
+// omits domain= entirely rather than listing every domain explicitly.
 (function () {
   const filterBox = document.getElementById('domain-filter');
   if (!filterBox) { loadVolumeChart(null); loadBounceChart(null); return; }
   const allBox = filterBox.querySelector('.js-domain-all');
   const boxes = Array.from(filterBox.querySelectorAll('.js-domain-toggle'));
+  const details = filterBox.querySelector('.domain-filter-toggle');
+  const summaryText = filterBox.querySelector('.js-domain-filter-summary');
+  const T_PICK = {{ t('filter.pick_domains') | tojson }};
 
   // null = no filter (everything checked); [] = nothing checked, show no
   // data; otherwise the explicit list of checked domains.
@@ -356,6 +365,10 @@ function loadBounceChart(domains) {
     const domains = selected();
     loadVolumeChart(domains);
     loadBounceChart(domains);
+    const checkedCount = boxes.filter(b => b.checked).length;
+    summaryText.textContent = checkedCount === boxes.length
+      ? T_PICK
+      : `${T_PICK} (${checkedCount}/${boxes.length})`;
   }
 
   allBox.addEventListener('change', () => {
@@ -367,6 +380,11 @@ function loadBounceChart(domains) {
     allBox.checked = boxes.every(x => x.checked);
     refresh();
   }));
+
+  // Close the picker on an outside click, like a normal dropdown.
+  document.addEventListener('click', (e) => {
+    if (details.open && !details.contains(e.target)) details.open = false;
+  });
 
   refresh();
 })();
