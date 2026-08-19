@@ -221,6 +221,19 @@ h1 { font-size: 23px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .range-picker a:hover:not(.active) { color: var(--text); background: var(--surface-3); }
 
 h2 { font-size: 15px; font-weight: 600; margin: 32px 0 13px; letter-spacing: -0.01em; }
+
+.domain-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 14px; }
+.domain-filter label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 12.5px; color: var(--text-muted); cursor: pointer; user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.domain-filter label:has(input:checked) {
+  background: var(--lh-orange-soft); border-color: var(--lh-orange-line); color: var(--text);
+}
+.domain-filter input { accent-color: var(--lh-orange); width: 13px; height: 13px; }
 h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-left: 8px; }
 
 .back-link { color: var(--text-muted); font-size: 13px; }

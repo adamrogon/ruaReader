@@ -7,7 +7,7 @@ gets plain dicts back. No SQLAlchemy objects cross this boundary.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from sqlalchemy import and_, case, desc, func, select
 
@@ -97,15 +97,19 @@ class DmarcRepository(_BaseRepository):
                 )
         return report_pk
 
-    def daily_volume(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+    def daily_volume(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
         """Message volume per day per domain, split by evaluation outcome."""
         day = func.date(dmarc_records.c.date_begin).label("day")
         conditions = [
             dmarc_records.c.project_id == self.project_id,
             dmarc_records.c.date_begin >= since,
         ]
-        if domain:
+        if isinstance(domain, str):
             conditions.append(dmarc_records.c.policy_domain == domain)
+        elif domain:
+            conditions.append(dmarc_records.c.policy_domain.in_(domain))
 
         stmt = (
             select(
@@ -395,14 +399,18 @@ class BounceRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
-    def daily_counts(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+    def daily_counts(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
         day = func.date(bounces.c.received_at).label("day")
         conditions = [
             bounces.c.project_id == self.project_id,
             bounces.c.received_at >= since,
         ]
-        if domain:
+        if isinstance(domain, str):
             conditions.append(bounces.c.sending_domain == domain)
+        elif domain:
+            conditions.append(bounces.c.sending_domain.in_(domain))
 
         stmt = (
             select(

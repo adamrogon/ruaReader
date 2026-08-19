@@ -382,7 +382,7 @@ def domain_detail(
 
 
 @app.get("/api/volume")
-def api_volume(domain: Optional[str] = None, days: int = Query(14, ge=1, le=90)) -> JSONResponse:
+def api_volume(domain: Optional[List[str]] = Query(None), days: int = Query(14, ge=1, le=90)) -> JSONResponse:
     """Daily DMARC message volume split by outcome."""
     ctx = _context()
     repo = DmarcRepository(ctx["database"], ctx["settings"].project_id)
@@ -413,7 +413,7 @@ def api_volume(domain: Optional[str] = None, days: int = Query(14, ge=1, le=90))
 
 
 @app.get("/api/bounces")
-def api_bounces(domain: Optional[str] = None, days: int = Query(14, ge=1, le=90)) -> JSONResponse:
+def api_bounces(domain: Optional[List[str]] = Query(None), days: int = Query(14, ge=1, le=90)) -> JSONResponse:
     """Daily bounce counts split by class."""
     ctx = _context()
     repo = BounceRepository(ctx["database"], ctx["settings"].project_id)

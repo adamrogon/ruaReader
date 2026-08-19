@@ -80,6 +80,7 @@ MESSAGES: dict = {
         "en": "which provider has a problem, and with which domains",
     },
     "section.trends": {"pl": "Trendy", "en": "Trends"},
+    "filter.all_domains": {"pl": "Wszystkie domeny", "en": "All domains"},
 
     "table.provider": {"pl": "Dostawca", "en": "Provider"},
     "table.messages": {"pl": "Wiadomości", "en": "Messages"},
