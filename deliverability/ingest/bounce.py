@@ -44,6 +44,14 @@ _BOUNCE_SENDERS = re.compile(
     r"mailer-daemon|postmaster|mail\s*delivery\s*(?:subsystem|system)|no-?reply.*deliver",
     re.IGNORECASE,
 )
+# RFC 7489 §7.2.1's mandated subject line for DMARC aggregate report emails:
+# "Report Domain: <policy domain> Submitter: <report generator> Report-ID:
+# <id>". Report generators are recommended to send from postmaster@<domain>,
+# which _BOUNCE_SENDERS also matches — so on a mailbox used for both rua and
+# bounce (one inbox, both mailbox configs pointing at it), a DMARC report
+# email would otherwise pass the sender check and get scanned as a bounce,
+# correctly fail to parse as one, and land in the log as noise.
+_DMARC_REPORT_SUBJECT = re.compile(r"^report\s+domain:.*submitter:.*report-id:", re.IGNORECASE)
 
 _ADDRESS_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _SMTP_CODE_RE = re.compile(r"\b([45]\d{2})\b")
@@ -68,6 +76,8 @@ def looks_like_bounce(message: Message) -> bool:
         if report_type == "delivery-status":
             return True
     subject = message.get("Subject") or ""
+    if _DMARC_REPORT_SUBJECT.search(subject):
+        return False
     sender = message.get("From") or ""
     return bool(_BOUNCE_SUBJECTS.search(subject) or _BOUNCE_SENDERS.search(sender))
 
