@@ -304,6 +304,10 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
         )
     esp_summary.sort(key=lambda e: (ESP_DISPLAY_ORDER.get(e["esp"], 50), -e["total"]))
 
+    other_providers = DmarcRepository(ctx["database"], ctx["settings"].project_id).other_esp_org_breakdown(
+        _since(days)
+    )
+
     return _render(
         request,
         "overview.html",
@@ -313,6 +317,7 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
             "health": health,
             "totals": totals,
             "esp_summary": esp_summary,
+            "other_providers": other_providers,
             "days": days,
             "staleness_hours": STALENESS_HOURS,
         },
@@ -407,6 +412,9 @@ def domain_detail(
             },
             "top_failing": DmarcRepository(database, settings.project_id).top_failing_sources(
                 since, domain, limit=12
+            ),
+            "other_providers": DmarcRepository(database, settings.project_id).other_esp_org_breakdown(
+                since, domain
             ),
             "days": days,
             "notes": configured[domain].notes,

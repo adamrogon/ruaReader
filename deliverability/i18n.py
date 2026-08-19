@@ -870,6 +870,8 @@ MESSAGES: dict = {
     },
 
     # --- Run now --------------------------------------------------------------
+    "esp.other_breakdown_hint": {"pl": "kliknij, by zobaczyć poszczególnych nadawców", "en": "click to see individual reporters"},
+    "esp.other_show_more": {"pl": "Pokaż więcej ({n})", "en": "Show more ({n})"},
     "action.refresh": {"pl": "Sprawdź teraz", "en": "Check now"},
     "action.refresh_all": {"pl": "Sprawdź wszystko", "en": "Check everything"},
     "action.running": {"pl": "W trakcie…", "en": "Running…"},

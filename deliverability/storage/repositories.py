@@ -182,6 +182,38 @@ class DmarcRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def other_esp_org_breakdown(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Which real reporting organisations are hiding inside the "Other"
+        ESP bucket, and how much volume each sent.
+
+        `esp_breakdown()` groups by the classified `receiving_esp` label, so
+        every org_name that :func:`classify.esp.esp_from_org_name` doesn't
+        recognise collapses into one "Other" row — a single unrecognised
+        provider with real volume looks identical to ten one-off reporters
+        with a single message each. This answers that distinction from the
+        raw org_name, which is still stored per record even though the
+        classified label is not.
+        """
+        conditions = [
+            dmarc_records.c.project_id == self.project_id,
+            dmarc_records.c.date_begin >= since,
+            dmarc_records.c.receiving_esp == "Other",
+        ]
+        if domain:
+            conditions.append(dmarc_records.c.policy_domain == domain)
+
+        stmt = (
+            select(
+                dmarc_records.c.org_name,
+                func.sum(dmarc_records.c.message_count).label("messages"),
+            )
+            .where(and_(*conditions))
+            .group_by(dmarc_records.c.org_name)
+            .order_by(desc("messages"))
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
     def reporting_orgs(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
         """Which organisations sent reports, and how many.
 

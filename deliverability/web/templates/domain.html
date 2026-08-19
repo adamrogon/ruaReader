@@ -112,15 +112,40 @@
       {% for row in status.esp_rows %}
         <tr>
           <td>
-            <span class="esp-name">
-              {% set logo = esp_logo(row.esp) %}
-              {% if logo %}
-                <img class="esp-logo" src="{{ logo }}" alt="" width="16" height="16">
-              {% else %}
-                <span class="esp-swatch" style="background: #a3a3a3"></span>
-              {% endif %}
-              {{ row.esp }}
-            </span>
+            {% if row.esp == 'Other' and other_providers %}
+              <details class="other-breakdown">
+                <summary>
+                  <span class="esp-name">
+                    <span class="esp-swatch" style="background: #a3a3a3"></span>
+                    {{ row.esp }}
+                  </span>
+                  <span class="hint">{{ t('esp.other_breakdown_hint') }}</span>
+                </summary>
+                <div class="other-breakdown-list">
+                  {% for p in other_providers[:5] %}
+                    <div class="other-breakdown-item"><span>{{ p.org_name }}</span><span>{{ "{:,}".format(p.messages) }}</span></div>
+                  {% endfor %}
+                  {% if other_providers | length > 5 %}
+                    <details class="other-breakdown-more">
+                      <summary>{{ t('esp.other_show_more', n=other_providers|length - 5) }}</summary>
+                      {% for p in other_providers[5:] %}
+                        <div class="other-breakdown-item"><span>{{ p.org_name }}</span><span>{{ "{:,}".format(p.messages) }}</span></div>
+                      {% endfor %}
+                    </details>
+                  {% endif %}
+                </div>
+              </details>
+            {% else %}
+              <span class="esp-name">
+                {% set logo = esp_logo(row.esp) %}
+                {% if logo %}
+                  <img class="esp-logo" src="{{ logo }}" alt="" width="16" height="16">
+                {% else %}
+                  <span class="esp-swatch" style="background: #a3a3a3"></span>
+                {% endif %}
+                {{ row.esp }}
+              </span>
+            {% endif %}
           </td>
           <td>{{ "{:,}".format(row.total) }}</td>
           <td>

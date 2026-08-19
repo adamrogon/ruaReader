@@ -50,6 +50,8 @@ _ORG_PATTERNS: Tuple[Tuple[str, str], ...] = (
     (r"fastmail|messagingengine", FASTMAIL),
     (r"gmx|united[\s-]*internet|web\.de|1&1|ionos|kundenserver", GMX),
     (r"comcast", COMCAST),
+    (r"mimecast", "Mimecast"),
+    (r"godaddy", "GoDaddy"),
     # Extra European hosters/ESPs that show up regularly in cold-outreach
     # bounce streams; without these they fall into "Other" and make the
     # per-provider view less useful than it should be.
