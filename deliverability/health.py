@@ -45,6 +45,12 @@ SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2, "ok": 3}
 URGENCY_SENDER_BLOCK = 1000
 URGENCY_SENDER_BLOCK_MINOR = 150
 URGENCY_BLACKLISTED = 800
+# A listing on a DNSBL that only lists whole netblocks/ASNs (UCEProtect
+# level 2/3 and similar) says something about the hosting neighbourhood, not
+# this domain's own sending — worth showing, not worth the same alarm as a
+# listing on a list receivers actually act on. See HIGH_SIGNAL_DNSBLS /
+# NETBLOCK_WIDE_DNSBLS below.
+URGENCY_BLACKLISTED_MINOR = 120
 URGENCY_DNS_CRITICAL = 600
 URGENCY_HIGH_HARD_BOUNCE = 400
 URGENCY_LOW_COMPLIANCE = 300
@@ -355,9 +361,16 @@ def build_domain_status(
         high_signal = sorted(n for n in names if n in HIGH_SIGNAL_DNSBLS)
         netblock_wide = sorted(n for n in names if n in NETBLOCK_WIDE_DNSBLS)
 
+        # Only a listing on a list receivers actually act on (Spamhaus,
+        # Barracuda, SpamCop...) is a real, actionable problem. A listing
+        # that is exclusively on netblock-wide lists (UCEProtect level 2/3
+        # and similar) says something about the hosting neighbourhood, not
+        # this domain's sending, so it is shown as a warning, not a block —
+        # same principle as the sender_block major/minor split above.
+        is_netblock_only = bool(netblock_wide) and len(netblock_wide) == len(names) and not high_signal
         if high_signal:
             detail = Nested("flag.blacklist.detail_high_signal", names=", ".join(high_signal))
-        elif netblock_wide and len(netblock_wide) == len(names):
+        elif is_netblock_only:
             # Worth showing, but chasing a delisting here is usually wasted
             # effort — the listing is about the hosting provider, not you.
             detail = Nested("flag.blacklist.detail_netblock_wide", names=", ".join(netblock_wide))
@@ -366,7 +379,7 @@ def build_domain_status(
 
         flags.append(
             Flag(
-                severity="critical",
+                severity="warning" if is_netblock_only else "critical",
                 title_key="flag.blacklist.title",
                 title_params={"ip_count": len(ips), "list_count": len(names)},
                 message_key="flag.blacklist.message",
@@ -376,7 +389,7 @@ def build_domain_status(
                     "detail": detail,
                 },
                 source="dnsbl",
-                urgency_weight=URGENCY_BLACKLISTED,
+                urgency_weight=URGENCY_BLACKLISTED_MINOR if is_netblock_only else URGENCY_BLACKLISTED,
                 fingerprint="blacklist",
             )
         )
@@ -512,6 +525,17 @@ def build_domain_status(
     # critical.
     _recompute(status)
 
+    # Badge-worthy, as opposed to merely "the count is above zero": a top-of-
+    # page "blocked"/"blacklisted" badge should reflect an actually-critical,
+    # currently-active flag — not a raw count that ignores major/minor ESP
+    # tiering, high-signal/netblock-wide tiering, or a dismissal. Without
+    # this, a single warning-tier block from an unrecognised sender, or a
+    # netblock-wide-only DNSBL hit, makes a healthy domain look on fire.
+    critical_sender_block = any(
+        f.fingerprint.startswith("sender_block:") and f.severity == "critical" for f in status.flags
+    )
+    critical_blacklist = any(f.fingerprint == "blacklist" and f.severity == "critical" for f in status.flags)
+
     status.metrics = {
         "messages": compliance.get("total", 0),
         "passed": compliance.get("passed", 0),
@@ -523,8 +547,10 @@ def build_domain_status(
         "bounces_soft": soft,
         "bounces_unknown": unknown,
         "bounces_sender_block": blocks,
+        "critical_sender_block": critical_sender_block,
         "hard_bounce_rate": hard_rate,
         "blacklisted_ips": len({row["ip"] for row in listed}),
+        "critical_blacklist": critical_blacklist,
         "dmarc_policy": (dns_row or {}).get("dmarc_policy"),
         "spf_lookups": (dns_row or {}).get("spf_lookup_count"),
         "spf_lookup_limit": (dns_row or {}).get("spf_lookup_limit"),

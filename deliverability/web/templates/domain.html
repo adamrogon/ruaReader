@@ -9,8 +9,8 @@
     <a class="back-link" href="/?lang={{ lang }}&days={{ days }}">{{ t('domain.back') }}</a>
     <h1 style="margin-top:6px">
       {{ domain }}
-      {% if m.bounces_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
-      {% if m.blacklisted_ips %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
+      {% if m.critical_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
+      {% if m.critical_blacklist %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
       {% if status.severity == 'ok' %}<span class="badge ok">{{ t('badge.healthy') }}</span>{% endif %}
     </h1>
     <p>{{ status.headline }}{% if notes %} · {{ notes }}{% endif %}</p>
@@ -36,7 +36,7 @@
       <div class="kpi-label">{{ t('kpi.forwarded') }}</div>
       <div class="kpi-value">{{ "{:,}".format(m.forwarded) }}</div>
     </div>
-    <div class="kpi {{ 'is-critical' if m.bounces_sender_block else '' }}">
+    <div class="kpi {{ 'is-critical' if m.critical_sender_block else ('is-warning' if m.bounces_sender_block else '') }}">
       <div class="kpi-label">{{ t('kpi.sender_blocks') }}</div>
       <div class="kpi-value">{{ m.bounces_sender_block }}</div>
     </div>

@@ -268,7 +268,7 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
         "warning": sum(1 for s in statuses if s["severity"] == "warning"),
         "ok": sum(1 for s in statuses if s["severity"] in ("ok", "info")),
         "sender_blocks": sum(s["metrics"].get("bounces_sender_block", 0) for s in statuses),
-        "blacklisted": sum(1 for s in statuses if s["metrics"].get("blacklisted_ips", 0)),
+        "blacklisted": sum(1 for s in statuses if s["metrics"].get("critical_blacklist")),
         "messages": sum(s["metrics"].get("messages", 0) for s in statuses),
     }
 

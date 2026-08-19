@@ -78,8 +78,8 @@
       <div>
         <div class="domain-name">
           {{ status.domain }}
-          {% if m.bounces_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
-          {% if m.blacklisted_ips %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
+          {% if m.critical_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
+          {% if m.critical_blacklist %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
           {% if status.severity == 'ok' %}<span class="badge ok">{{ t('badge.ok') }}</span>{% endif %}
         </div>
         <div class="domain-headline">{{ status.headline }}</div>
@@ -103,7 +103,7 @@
 
       <div class="metric">
         <div class="metric-label">{{ t('metric.bounces') }}</div>
-        <div class="metric-value {{ 'is-critical' if m.bounces_sender_block else ('is-warning' if m.bounces_hard else 'is-dim') }}">
+        <div class="metric-value {{ 'is-critical' if m.critical_sender_block else ('is-warning' if (m.bounces_sender_block or m.bounces_hard) else 'is-dim') }}">
           {{ m.bounces_total }}
         </div>
       </div>
