@@ -113,10 +113,14 @@
         <tr>
           <td>
             <span class="esp-name">
-              <span class="esp-swatch" style="background: {{ {
-                'Google': '#e9941e', 'Microsoft': '#3b82f6', 'Yahoo': '#a855f7',
-                'Seznam': '#3baf4f', 'WP/O2': '#ef4444', 'Onet': '#14b8a6'
-              }.get(row.esp, '#a3a3a3') }}"></span>
+              {% set logo = esp_logo(row.esp) %}
+              {% if logo %}
+                <span class="esp-logo">{{ logo }}</span>
+              {% else %}
+                <span class="esp-swatch" style="background: {{ {
+                  'Seznam': '#3baf4f', 'Onet': '#14b8a6'
+                }.get(row.esp, '#a3a3a3') }}"></span>
+              {% endif %}
               {{ row.esp }}
             </span>
           </td>

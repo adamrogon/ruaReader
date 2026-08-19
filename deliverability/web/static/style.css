@@ -499,6 +499,8 @@ tbody tr:hover { background: var(--surface-2); }
 
 .esp-name { display: flex; align-items: center; gap: 9px; font-weight: 500; }
 .esp-swatch { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.esp-logo { display: inline-flex; flex-shrink: 0; width: 16px; height: 16px; color: var(--text-muted); }
+.esp-logo svg { width: 100%; height: 100%; display: block; }
 
 /* --- DNS record panel ---------------------------------------------------- */
 

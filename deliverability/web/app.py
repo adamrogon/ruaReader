@@ -104,6 +104,49 @@ def _static_version() -> str:
 templates.env.globals["static_version"] = _static_version()
 
 
+# Canonical ESP name (see classify/esp.py) -> logo file in static/logos/.
+# Only providers with a real, verified brand mark available are listed here;
+# anything else (Seznam, Onet, Interia, Fastmail, Comcast, Other, Unknown)
+# falls back to the plain colored-initial swatch in the template.
+_ESP_LOGO_FILES = {
+    "Google": "google.svg",
+    "Microsoft": "microsoft.svg",
+    "Yahoo": "yahoo.svg",
+    "WP/O2": "o2.svg",
+    "Mail.ru": "mailru.svg",
+    "Proton": "protonmail.svg",
+    "Zoho": "zoho.svg",
+    "Apple": "apple.svg",
+    "AOL": "aol.svg",
+    "GMX/United Internet": "gmx.svg",
+}
+_ESP_LOGO_CACHE: Dict[str, "Any"] = {}
+
+
+def _esp_logo(esp_name: Optional[str]) -> "Any":
+    """Inline SVG markup for an ESP's brand mark, or '' if none is on file.
+
+    Read once per process and cached — these are static assets, so re-reading
+    them from disk on every table row would be pure waste. Returned as Markup
+    (pre-escaped, trusted) since the SVGs are our own bundled files, not
+    user input.
+    """
+    from markupsafe import Markup
+
+    filename = _ESP_LOGO_FILES.get(esp_name or "")
+    if not filename:
+        return ""
+    if filename not in _ESP_LOGO_CACHE:
+        try:
+            _ESP_LOGO_CACHE[filename] = (BASE_DIR / "static" / "logos" / filename).read_text()
+        except OSError:
+            _ESP_LOGO_CACHE[filename] = ""
+    return Markup(_ESP_LOGO_CACHE[filename])
+
+
+templates.env.globals["esp_logo"] = _esp_logo
+
+
 def _bounce_code_help(code: Optional[str], lang: str) -> str:
     """Human one-liner for an SMTP status code, or '' if none is defined.
 
