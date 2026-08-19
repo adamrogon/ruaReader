@@ -105,43 +105,33 @@ templates.env.globals["static_version"] = _static_version()
 
 
 # Canonical ESP name (see classify/esp.py) -> logo file in static/logos/.
-# Only providers with a real, verified brand mark available are listed here;
-# anything else (Seznam, Onet, Interia, Fastmail, Comcast, Other, Unknown)
-# falls back to the plain colored-initial swatch in the template.
+# These are each provider's own real favicon (fetched once from
+# icons.duckduckgo.com and normalised to 64x64 PNG), not a redrawn icon set —
+# multi-color and immediately recognisable, unlike a single-tint glyph.
+# Anything not listed here (Comcast, Other, Unknown) falls back to the plain
+# colored-initial swatch in the template.
 _ESP_LOGO_FILES = {
-    "Google": "google.svg",
-    "Microsoft": "microsoft.svg",
-    "Yahoo": "yahoo.svg",
-    "WP/O2": "o2.svg",
-    "Mail.ru": "mailru.svg",
-    "Proton": "protonmail.svg",
-    "Zoho": "zoho.svg",
-    "Apple": "apple.svg",
-    "AOL": "aol.svg",
-    "GMX/United Internet": "gmx.svg",
+    "Google": "google.png",
+    "Microsoft": "microsoft.png",
+    "Yahoo": "yahoo.png",
+    "WP/O2": "o2.png",
+    "Mail.ru": "mailru.png",
+    "Proton": "protonmail.png",
+    "Zoho": "zoho.png",
+    "Apple": "apple.png",
+    "AOL": "aol.png",
+    "GMX/United Internet": "gmx.png",
+    "Fastmail": "fastmail.png",
+    "Seznam": "seznam.png",
+    "Onet": "onet.png",
+    "Interia": "interia.png",
 }
-_ESP_LOGO_CACHE: Dict[str, "Any"] = {}
 
 
-def _esp_logo(esp_name: Optional[str]) -> "Any":
-    """Inline SVG markup for an ESP's brand mark, or '' if none is on file.
-
-    Read once per process and cached — these are static assets, so re-reading
-    them from disk on every table row would be pure waste. Returned as Markup
-    (pre-escaped, trusted) since the SVGs are our own bundled files, not
-    user input.
-    """
-    from markupsafe import Markup
-
+def _esp_logo(esp_name: Optional[str]) -> str:
+    """Static URL for an ESP's logo, or '' if none is on file."""
     filename = _ESP_LOGO_FILES.get(esp_name or "")
-    if not filename:
-        return ""
-    if filename not in _ESP_LOGO_CACHE:
-        try:
-            _ESP_LOGO_CACHE[filename] = (BASE_DIR / "static" / "logos" / filename).read_text()
-        except OSError:
-            _ESP_LOGO_CACHE[filename] = ""
-    return Markup(_ESP_LOGO_CACHE[filename])
+    return f"/static/logos/{filename}" if filename else ""
 
 
 templates.env.globals["esp_logo"] = _esp_logo

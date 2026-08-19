@@ -115,11 +115,9 @@
             <span class="esp-name">
               {% set logo = esp_logo(row.esp) %}
               {% if logo %}
-                <span class="esp-logo">{{ logo }}</span>
+                <img class="esp-logo" src="{{ logo }}" alt="" width="16" height="16">
               {% else %}
-                <span class="esp-swatch" style="background: {{ {
-                  'Seznam': '#3baf4f', 'Onet': '#14b8a6'
-                }.get(row.esp, '#a3a3a3') }}"></span>
+                <span class="esp-swatch" style="background: #a3a3a3"></span>
               {% endif %}
               {{ row.esp }}
             </span>
