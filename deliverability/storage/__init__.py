@@ -10,6 +10,7 @@ from .database import Database, get_database
 from .repositories import (
     BlacklistRepository,
     BounceRepository,
+    DismissedFlagRepository,
     DmarcRepository,
     DnsRepository,
     DomainConfigRepository,
@@ -27,4 +28,5 @@ __all__ = [
     "IngestionRunRepository",
     "DomainConfigRepository",
     "MailboxConfigRepository",
+    "DismissedFlagRepository",
 ]

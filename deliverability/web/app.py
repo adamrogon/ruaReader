@@ -30,6 +30,7 @@ from ..secrets import encrypt as encrypt_secret
 from ..secrets import is_configured as secret_key_configured
 from ..storage import (
     BounceRepository,
+    DismissedFlagRepository,
     DmarcRepository,
     DnsRepository,
     DomainConfigRepository,
@@ -379,6 +380,32 @@ def domain_detail(
             "selectors": configured[domain].dkim_selectors,
         },
     )
+
+
+@app.post("/domain/{domain}/flags/dismiss")
+def dismiss_flag(
+    request: Request,
+    domain: str,
+    fingerprint: str = Form(...),
+    days: int = Form(DEFAULT_WINDOW_DAYS),
+):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    DismissedFlagRepository(ctx["database"], ctx["settings"].project_id).dismiss(domain, fingerprint)
+    return RedirectResponse(f"/domain/{domain}?lang={lang}&days={days}", status_code=303)
+
+
+@app.post("/domain/{domain}/flags/restore")
+def restore_flag(
+    request: Request,
+    domain: str,
+    fingerprint: str = Form(...),
+    days: int = Form(DEFAULT_WINDOW_DAYS),
+):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    DismissedFlagRepository(ctx["database"], ctx["settings"].project_id).restore(domain, fingerprint)
+    return RedirectResponse(f"/domain/{domain}?lang={lang}&days={days}", status_code=303)
 
 
 @app.get("/api/volume")

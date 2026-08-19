@@ -24,6 +24,7 @@ from .storage import (
     BlacklistRepository,
     BounceRepository,
     Database,
+    DismissedFlagRepository,
     DmarcRepository,
     DnsRepository,
     IngestionRunRepository,
@@ -104,6 +105,13 @@ class Flag:
     title_key: str
     message_key: str
     source: str  # 'bounce' | 'dnsbl' | 'dns' | 'rua' | 'ingestion'
+    # Stable id for "this kind of flag on this domain", set explicitly at each
+    # Flag(...) call site rather than derived — a generic derivation (e.g.
+    # title_key + esp) would silently break for the one flag type that
+    # legitimately repeats per ESP (sender_block) vs. the rest, which don't.
+    # Used to persist a dismissal across ingestion runs; see
+    # DismissedFlagRepository.
+    fingerprint: str = ""
     title_params: Dict[str, Any] = field(default_factory=dict)
     message_params: Dict[str, Any] = field(default_factory=dict)
     esp: Optional[str] = None
@@ -121,6 +129,7 @@ class Flag:
             "message": translate(self.message_key, lang, **self.message_params),
             "source": translate(f"source.{self.source}", lang),
             "esp": self.esp,
+            "fingerprint": self.fingerprint,
         }
 
 
@@ -130,6 +139,10 @@ class DomainStatus:
     urgency: int = 0
     severity: str = "ok"
     flags: List[Flag] = field(default_factory=list)
+    # Flags matching a fingerprint the user dismissed for this domain. Kept
+    # out of `flags` (and so out of urgency/severity) but still available to
+    # show in a collapsed "dismissed" list.
+    dismissed_flags: List[Flag] = field(default_factory=list)
     metrics: Dict[str, Any] = field(default_factory=dict)
     esp_rows: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -147,6 +160,7 @@ class DomainStatus:
             "severity": self.severity,
             "headline": _headline_text(self, localized_flags, lang),
             "flags": localized_flags,
+            "dismissed_flags": [f.localize(lang) for f in self.dismissed_flags],
             "metrics": self.metrics,
             "esp_rows": self.esp_rows,
         }
@@ -275,6 +289,7 @@ def build_domain_status(
     bounce_classes: Dict[str, int],
     sender_blocks: Sequence[Dict[str, Any]],
     blacklist_rows: Sequence[Dict[str, Any]],
+    dismissed_fingerprints: Optional[Sequence[str]] = None,
 ) -> DomainStatus:
     """Assemble one domain's status from the four streams."""
     status = DomainStatus(domain=domain_name)
@@ -321,6 +336,7 @@ def build_domain_status(
                     source="bounce",
                     esp=esp,
                     urgency_weight=weight,
+                    fingerprint=f"sender_block:{esp}",
                 )
             )
 
@@ -355,6 +371,7 @@ def build_domain_status(
                 },
                 source="dnsbl",
                 urgency_weight=URGENCY_BLACKLISTED,
+                fingerprint="blacklist",
             )
         )
 
@@ -377,6 +394,7 @@ def build_domain_status(
                     message_params=warning.get("message_params") or {},
                     source="dns",
                     urgency_weight=weight,
+                    fingerprint=f"dns:{warning.get('title_key', 'unknown')}",
                 )
             )
 
@@ -401,6 +419,7 @@ def build_domain_status(
                     message_params={"hard": hard, "sent": sent_estimate, "threshold": HARD_BOUNCE_RATE_CRITICAL},
                     source="bounce",
                     urgency_weight=URGENCY_HIGH_HARD_BOUNCE,
+                    fingerprint="hard_bounce_rate_critical",
                 )
             )
         elif hard_rate >= HARD_BOUNCE_RATE_WARN:
@@ -413,6 +432,7 @@ def build_domain_status(
                     message_params={"hard": hard, "sent": sent_estimate, "threshold": HARD_BOUNCE_RATE_WARN},
                     source="bounce",
                     urgency_weight=URGENCY_SOFT_BOUNCE,
+                    fingerprint="hard_bounce_rate_warning",
                 )
             )
 
@@ -424,6 +444,7 @@ def build_domain_status(
                 title_params={"count": unknown},
                 message_key="flag.bounce.unparsed.message",
                 source="bounce",
+                fingerprint="bounce_unparsed",
             )
         )
 
@@ -458,6 +479,7 @@ def build_domain_status(
                     source="rua",
                     esp=worst,
                     urgency_weight=weight,
+                    fingerprint=f"low_compliance_{severity}",
                 )
             )
 
@@ -469,13 +491,19 @@ def build_domain_status(
                 message_key="flag.rua.no_data.message",
                 source="rua",
                 urgency_weight=URGENCY_NO_DATA,
+                fingerprint="no_data",
             )
         )
 
     # --- Roll up -----------------------------------------------------------
-    status.flags = sorted(flags, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
-    # Urgency and severity are derived in _recompute(), which is also what
-    # runs again after acknowledgements are applied.
+    dismissed = set(dismissed_fingerprints or ())
+    active = [f for f in flags if f.fingerprint not in dismissed]
+    hidden = [f for f in flags if f.fingerprint in dismissed]
+    status.flags = sorted(active, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
+    status.dismissed_flags = sorted(hidden, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))
+    # Urgency and severity are derived from the active (non-dismissed) flags
+    # only — a dismissed blacklist hit should not keep the domain looking
+    # critical.
     _recompute(status)
 
     status.metrics = {
@@ -578,6 +606,8 @@ def domain_statuses(
     dns_repo = DnsRepository(database, settings.project_id)
     bounce_repo = BounceRepository(database, settings.project_id)
     blacklist_repo = BlacklistRepository(database, settings.project_id)
+    dismissed_repo = DismissedFlagRepository(database, settings.project_id)
+    dismissed_by_domain = dismissed_repo.all_by_domain()
 
     since = _utcnow() - dt.timedelta(days=window_days)
 
@@ -604,6 +634,7 @@ def domain_statuses(
             bounce_classes=bounce_classes,
             sender_blocks=rows_for(block_rows, domain.name),
             blacklist_rows=blacklist_latest.get(domain.name, []),
+            dismissed_fingerprints=dismissed_by_domain.get(domain.name),
         )
         statuses.append(status)
 

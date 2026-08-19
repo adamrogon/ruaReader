@@ -596,26 +596,34 @@ tbody tr:hover { background: var(--surface-2); }
 .test-result.is-error { color: var(--critical-text); }
 .test-result.is-warning { color: var(--warning-text); }
 
-/* --- Acknowledged flags ---------------------------------------------------- */
+/* --- Flag dismissal ---------------------------------------------------- */
 
-.flag.is-acked {
-  opacity: 0.72;
-  background: var(--surface);
-  border-left-color: var(--text-dim);
-  border-color: var(--border);
+.flag-dismiss-form { margin-left: auto; }
+.flag-dismiss {
+  width: 20px; height: 20px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 5px; border: 1px solid transparent;
+  background: transparent; color: var(--text-dim);
+  font-size: 15px; line-height: 1; cursor: pointer;
 }
-.flag.is-acked .flag-title { color: var(--text-muted); text-decoration: line-through; }
-.flag-ack-bar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border);
+.flag-dismiss:hover { background: var(--surface-3); border-color: var(--border); color: var(--text); }
+
+.dismissed-section { margin: 18px 0 28px; }
+.dismissed-section summary {
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted);
+  list-style: none; display: flex; align-items: center; gap: 6px; padding: 4px 0;
 }
-.flag-ack-bar input[type="text"] {
-  flex: 1; min-width: 160px; padding: 5px 10px; font-size: 12px;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text); font-family: inherit;
+.dismissed-section summary::-webkit-details-marker { display: none; }
+.dismissed-section summary::before { content: "▸"; font-size: 11px; display: inline-block; transition: transform 0.12s; }
+.dismissed-section[open] summary::before { transform: rotate(90deg); }
+.dismissed-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.dismissed-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2);
 }
-.flag-ack-note { font-size: 12px; color: var(--text-muted); font-style: italic; }
-.ack-explainer { color: var(--text-dim); font-size: 12px; margin: 0 0 10px; }
+.dismissed-item .flag-title { font-size: 12.5px; font-weight: 500; color: var(--text-muted); flex: 1; }
+.dismissed-item form { margin-left: auto; }
 
 /* --- Run-now control ------------------------------------------------------- */
 

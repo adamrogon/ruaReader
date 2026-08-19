@@ -272,6 +272,23 @@ mailboxes = Table(
 )
 
 
+
+# Flags a user has chosen to stop seeing on a domain's "what needs attention"
+# list. Identified by a stable fingerprint per flag type (see health.py), not
+# by row id — a dismissal is "hide this kind of thing on this domain", so it
+# keeps applying as long as the same fingerprint keeps recurring.
+dismissed_flags = Table(
+    "dismissed_flags",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("domain", String(255), nullable=False, index=True),
+    Column("fingerprint", String(255), nullable=False),
+    Column("dismissed_at", DateTime, nullable=False),
+    UniqueConstraint("project_id", "domain", "fingerprint", name="uq_dismissed_flag"),
+)
+
+
 ALL_TABLES = (
     dmarc_reports,
     dmarc_records,
@@ -281,4 +298,5 @@ ALL_TABLES = (
     ingestion_runs,
     domains,
     mailboxes,
+    dismissed_flags,
 )

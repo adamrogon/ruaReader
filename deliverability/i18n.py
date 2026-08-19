@@ -153,6 +153,9 @@ MESSAGES: dict = {
     "domain.back": {"pl": "‹ Wszystkie domeny", "en": "‹ All domains"},
     "section.attention": {"pl": "Co wymaga uwagi", "en": "What needs attention"},
     "section.attention_hint": {"pl": "od najpoważniejszych", "en": "most serious first"},
+    "section.dismissed": {"pl": "Pominięte", "en": "Dismissed"},
+    "flag.dismiss": {"pl": "Pomiń tę uwagę", "en": "Dismiss this flag"},
+    "flag.restore": {"pl": "Przywróć", "en": "Restore"},
     "section.sender_blocks": {"pl": "Blokady nadawcy", "en": "Sender blocks"},
     "section.sender_blocks_hint": {
         "pl": "odrzucenie domeny, nie pojedynczych adresów",

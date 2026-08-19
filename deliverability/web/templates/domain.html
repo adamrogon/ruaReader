@@ -61,6 +61,11 @@
           <span class="flag-title">{{ flag.title }}</span>
           <span class="badge {{ flag.severity }}">{{ t('severity.' ~ flag.severity) }}</span>
           <span class="flag-src">{{ flag.source }}{% if flag.esp %} · {{ flag.esp }}{% endif %}</span>
+          <form method="post" action="/domain/{{ domain }}/flags/dismiss?lang={{ lang }}" class="flag-dismiss-form">
+            <input type="hidden" name="fingerprint" value="{{ flag.fingerprint }}">
+            <input type="hidden" name="days" value="{{ days }}">
+            <button type="submit" class="flag-dismiss" title="{{ t('flag.dismiss') }}">&times;</button>
+          </form>
         </div>
         {# bold_markers turns **...** in translations into <strong>...</strong>
            after HTML-escaping the surrounding text; safe then lets those tags
@@ -72,6 +77,25 @@
 {% else %}
   <h2>{{ t('section.attention') }}</h2>
   <div class="empty">{{ t('empty.nothing_flagged', days=days) }}</div>
+{% endif %}
+
+{% if status.dismissed_flags %}
+  <details class="dismissed-section">
+    <summary>{{ t('section.dismissed') }} ({{ status.dismissed_flags | length }})</summary>
+    <div class="dismissed-list">
+      {% for flag in status.dismissed_flags %}
+        <div class="dismissed-item">
+          <span class="badge {{ flag.severity }}">{{ t('severity.' ~ flag.severity) }}</span>
+          <span class="flag-title">{{ flag.title }}</span>
+          <form method="post" action="/domain/{{ domain }}/flags/restore?lang={{ lang }}">
+            <input type="hidden" name="fingerprint" value="{{ flag.fingerprint }}">
+            <input type="hidden" name="days" value="{{ days }}">
+            <button type="submit" class="btn btn-ghost btn-sm">{{ t('flag.restore') }}</button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  </details>
 {% endif %}
 
 {# --- Per-ESP ------------------------------------------------------------- #}

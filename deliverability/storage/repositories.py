@@ -15,6 +15,7 @@ from .database import Database
 from .schema import (
     blacklist_checks,
     bounces,
+    dismissed_flags,
     dmarc_records,
     dmarc_reports,
     dns_checks,
@@ -966,5 +967,61 @@ class MailboxConfigRepository(_BaseRepository):
         )
         with self.db.connect() as conn:
             return int(conn.execute(stmt).scalar() or 0)
+
+
+class DismissedFlagRepository(_BaseRepository):
+    """Which flag fingerprints a user has chosen to hide, per domain."""
+
+    def all_by_domain(self) -> Dict[str, set]:
+        """Every dismissal, grouped by domain — one query for the whole fleet."""
+        stmt = select(dismissed_flags.c.domain, dismissed_flags.c.fingerprint).where(
+            dismissed_flags.c.project_id == self.project_id
+        )
+        out: Dict[str, set] = {}
+        with self.db.connect() as conn:
+            for row in conn.execute(stmt):
+                out.setdefault(row.domain, set()).add(row.fingerprint)
+        return out
+
+    def for_domain(self, domain: str) -> set:
+        stmt = select(dismissed_flags.c.fingerprint).where(
+            and_(dismissed_flags.c.project_id == self.project_id, dismissed_flags.c.domain == domain)
+        )
+        with self.db.connect() as conn:
+            return {row.fingerprint for row in conn.execute(stmt)}
+
+    def dismiss(self, domain: str, fingerprint: str) -> None:
+        with self.db.connect() as conn:
+            exists = conn.execute(
+                select(dismissed_flags.c.id).where(
+                    and_(
+                        dismissed_flags.c.project_id == self.project_id,
+                        dismissed_flags.c.domain == domain,
+                        dismissed_flags.c.fingerprint == fingerprint,
+                    )
+                )
+            ).first()
+            if exists:
+                return
+            conn.execute(
+                dismissed_flags.insert().values(
+                    project_id=self.project_id,
+                    domain=domain,
+                    fingerprint=fingerprint,
+                    dismissed_at=dt.datetime.now(dt.timezone.utc),
+                )
+            )
+
+    def restore(self, domain: str, fingerprint: str) -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                dismissed_flags.delete().where(
+                    and_(
+                        dismissed_flags.c.project_id == self.project_id,
+                        dismissed_flags.c.domain == domain,
+                        dismissed_flags.c.fingerprint == fingerprint,
+                    )
+                )
+            )
 
 
