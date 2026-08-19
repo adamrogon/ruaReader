@@ -219,6 +219,12 @@ def ingestion_health(
         if latest_status == "error" and state == "ok":
             state = "erroring"
             message_key, message_params = "ingest.erroring", {"error": latest_error or "unknown error"}
+        elif latest_status == "partial" and state == "ok":
+            # Some mailboxes/domains in the last run failed while others
+            # succeeded — data is flowing (so this isn't "stale"), but part
+            # of it silently isn't, which "ok" would hide completely.
+            state = "partial"
+            message_key, message_params = "ingest.partial", {"error": latest_error or "unknown error"}
 
         report.append(
             {

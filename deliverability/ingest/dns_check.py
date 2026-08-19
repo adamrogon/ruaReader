@@ -464,7 +464,15 @@ def run(
             failures.append(f"{domain.name}: {exc}")
             detail[domain.name] = {"error": str(exc)}
 
-    status = "error" if failures and checked == 0 else "ok"
+    # "partial" matters as much as "error" once there are many domains: one
+    # domain failing its DNS check among thirty must not read as "ok" just
+    # because the other twenty-nine resolved fine.
+    if not failures:
+        status = "ok"
+    elif checked == 0:
+        status = "error"
+    else:
+        status = "partial"
     runs.finish(
         run_id,
         status=status,

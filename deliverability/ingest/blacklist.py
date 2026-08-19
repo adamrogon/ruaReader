@@ -235,7 +235,15 @@ def run(
     stored = repository.insert_many(rows)
     listed_total = sum(1 for r in rows if r["listed"])
 
-    status = "error" if failures and not rows else "ok"
+    # "partial" matters as much as "error" once there are many domains: one
+    # domain failing its blacklist check among thirty must not read as "ok"
+    # just because the other twenty-nine succeeded.
+    if not failures:
+        status = "ok"
+    elif len(failures) == len(domains):
+        status = "error"
+    else:
+        status = "partial"
     runs.finish(
         run_id,
         status=status,

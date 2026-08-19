@@ -270,10 +270,15 @@ MESSAGES: dict = {
         "pl": "Ostatnie uruchomienie zakończyło się błędem: {error}",
         "en": "The most recent run failed: {error}",
     },
+    "ingest.partial": {
+        "pl": "Część skrzynek/domen w ostatnim uruchomieniu zawiodła, reszta się powiodła: {error}",
+        "en": "Some mailboxes/domains failed in the last run, the rest succeeded: {error}",
+    },
     "ingest.state.ok": {"pl": "{hours:.0f}h temu", "en": "{hours:.0f}h ago"},
     "ingest.state.stale": {"pl": "nieaktualne ({hours:.0f}h)", "en": "stale ({hours:.0f}h)"},
     "ingest.state.never_run": {"pl": "nigdy nie uruchomiono", "en": "never run"},
     "ingest.state.erroring": {"pl": "błąd", "en": "erroring"},
+    "ingest.state.partial": {"pl": "częściowy błąd", "en": "partial failure"},
 
     # --- Flags: sender block --------------------------------------------------
     "flag.sender_block.title": {

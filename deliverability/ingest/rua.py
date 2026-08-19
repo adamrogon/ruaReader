@@ -215,25 +215,42 @@ def ingest_mailbox(
                 for xml in extract_xml_documents(filename, payload):
                     stats["reports_found"] += 1
                     try:
-                        # offline=False lets parsedmarc resolve reverse DNS,
-                        # which the forwarder classification depends on.
-                        parsed = parsedmarc.parse_aggregate_report_xml(xml, offline=offline)
-                        report_row, record_rows, receiving_esp = normalise_report(parsed)
+                        # Cheap, DNS-free parse first, purely to read the
+                        # identity fields (report_id/org_name/dates) needed
+                        # for the dedup check below. Without processed_folder
+                        # configured, a mailbox gets rescanned in full on
+                        # every run, and the vast majority of reports on any
+                        # given run are ones already stored — paying for a
+                        # live reverse-DNS lookup per source IP (offline=False)
+                        # on every one of those, every time, is what made
+                        # this stream take 60-100s for just two mailboxes.
+                        # report_id/org_name/date_begin/date_end/policy_domain
+                        # come straight from report_metadata/policy_published
+                        # in the XML, not from anything DNS-derived, so this
+                        # probe is exact — not an approximation.
+                        probe = parsedmarc.parse_aggregate_report_xml(xml, offline=True)
+                        probe_row, _, _ = normalise_report(probe)
 
-                        if not report_row["report_id"] or not report_row["policy_domain"]:
+                        if not probe_row["report_id"] or not probe_row["policy_domain"]:
                             logger.warning("Skipping report with no id/domain in %s", mailbox.name)
                             stats["errors"] += 1
                             continue
 
                         if repository.report_exists(
-                            report_row["report_id"],
-                            report_row["org_name"],
-                            report_row["date_begin"],
-                            report_row["date_end"],
+                            probe_row["report_id"],
+                            probe_row["org_name"],
+                            probe_row["date_begin"],
+                            probe_row["date_end"],
                         ):
                             stats["duplicates"] += 1
                             stored_any = True
                             continue
+
+                        # Only genuinely new reports pay for the full,
+                        # reverse-DNS-resolving parse the forwarder
+                        # classification depends on.
+                        parsed = probe if offline else parsedmarc.parse_aggregate_report_xml(xml, offline=offline)
+                        report_row, record_rows, receiving_esp = normalise_report(parsed)
 
                         report_row["raw_xml_path"] = archive_xml(
                             settings,
@@ -289,7 +306,15 @@ def run(
             failures.append(f"{mailbox.name}: {exc}")
             per_mailbox[mailbox.name] = {"error": str(exc)}
 
-    status = "ok" if not failures else ("error" if len(failures) == len(mailboxes) else "ok")
+    # "partial" matters as much as "error" once there is more than a handful
+    # of mailboxes: one broken mailbox among thirty must not read as "ok"
+    # just because the other twenty-nine succeeded.
+    if not failures:
+        status = "ok"
+    elif len(failures) == len(mailboxes):
+        status = "error"
+    else:
+        status = "partial"
     runs.finish(
         run_id,
         status=status,

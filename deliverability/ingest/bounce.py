@@ -310,7 +310,15 @@ def run(
             failures.append(f"{mailbox.name}: {exc}")
             per_mailbox[mailbox.name] = {"error": str(exc)}
 
-    status = "error" if failures and len(failures) == len(mailboxes) else "ok"
+    # "partial" matters as much as "error" once there is more than a handful
+    # of mailboxes: one broken mailbox among thirty must not read as "ok"
+    # just because the other twenty-nine succeeded.
+    if not failures:
+        status = "ok"
+    elif len(failures) == len(mailboxes):
+        status = "error"
+    else:
+        status = "partial"
     runs.finish(
         run_id,
         status=status,

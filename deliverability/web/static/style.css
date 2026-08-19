@@ -304,12 +304,12 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
   color: var(--text-muted);
 }
 .health-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
-.health-pill.is-stale, .health-pill.is-never_run, .health-pill.is-erroring {
+.health-pill.is-stale, .health-pill.is-never_run, .health-pill.is-erroring, .health-pill.is-partial {
   border-color: var(--warning-line); background: var(--warning-bg); color: var(--warning-text);
 }
-.health-pill.is-stale .dot, .health-pill.is-never_run .dot, .health-pill.is-erroring .dot { background: var(--warning); }
+.health-pill.is-stale .dot, .health-pill.is-never_run .dot, .health-pill.is-erroring .dot, .health-pill.is-partial .dot { background: var(--warning); }
 .health-pill strong { color: var(--text); font-weight: 500; }
-.health-pill.is-stale strong, .health-pill.is-never_run strong, .health-pill.is-erroring strong { color: var(--warning-text); }
+.health-pill.is-stale strong, .health-pill.is-never_run strong, .health-pill.is-erroring strong, .health-pill.is-partial strong { color: var(--warning-text); }
 
 .stale-note {
   margin-top: 12px; padding: 12px 15px;

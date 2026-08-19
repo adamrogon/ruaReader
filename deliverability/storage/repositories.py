@@ -782,6 +782,9 @@ class IngestionRunRepository(_BaseRepository):
 
         This drives the 48h staleness state — a stream that keeps erroring
         looks identical to one nobody is running, and both need surfacing.
+        "partial" (some mailboxes/domains failed, others didn't) counts as a
+        success for freshness purposes — data did land — but is still
+        surfaced separately via ``latest_status`` in ingestion_health().
         """
         stmt = (
             select(
@@ -791,7 +794,7 @@ class IngestionRunRepository(_BaseRepository):
             .where(
                 and_(
                     ingestion_runs.c.project_id == self.project_id,
-                    ingestion_runs.c.status == "ok",
+                    ingestion_runs.c.status.in_(("ok", "partial")),
                 )
             )
             .group_by(ingestion_runs.c.stream)
