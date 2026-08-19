@@ -3,45 +3,13 @@
 # Both sections are LISTS, so extra mailboxes are a config change, not a code
 # change. Passwords are never written here — `password_env` names an environment
 # variable defined in .env.
+#
+# This file only seeds the database when it is completely empty (first run).
+# Once you have real mailboxes, manage them from the Settings page in the
+# dashboard instead — editing this file afterwards has no effect.
 
 # --- Module 1: mailboxes receiving DMARC rua reports -------------------------
-# May be more than one while rua= consolidation in DNS is still in progress.
-rua_mailboxes:
-  - name: rua-main
-    host: imap.gmail.com
-    port: 993
-    ssl: true
-    username: dmarc@example.com
-    password_env: RUA_MAIN_PASSWORD
-    folder: INBOX
-    # Move processed report mails here instead of deleting them. Leave null to
-    # leave them in place (they are skipped on later runs via dedupe anyway).
-    processed_folder: null
-    enabled: true
+rua_mailboxes: []
 
 # --- Module 3: sending mailboxes that receive bounces/NDRs -------------------
-# NDRs come back to the mailbox that sent the message, so this cannot be
-# consolidated — one entry per sending mailbox. `domain` ties bounces to the
-# sending domain in reporting.
-bounce_mailboxes:
-  - name: outreach-domain1
-    domain: domain1.com
-    host: imap.gmail.com
-    port: 993
-    ssl: true
-    username: outreach@domain1.com
-    password_env: BOUNCE_DOMAIN1_PASSWORD
-    folder: INBOX
-    processed_folder: null
-    enabled: true
-
-  - name: outreach-domain2
-    domain: domain2.com
-    host: outlook.office365.com
-    port: 993
-    ssl: true
-    username: outreach@domain2.com
-    password_env: BOUNCE_DOMAIN2_PASSWORD
-    folder: INBOX
-    processed_folder: null
-    enabled: true
+bounce_mailboxes: []

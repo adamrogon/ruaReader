@@ -756,8 +756,8 @@ MESSAGES: dict = {
     "btn.close": {"pl": "Zamknij", "en": "Close"},
 
     "confirm.delete_domain": {
-        "pl": "Usunąć tę domenę z monitoringu? Zebrane dane historyczne zostaną w bazie.",
-        "en": "Remove this domain from monitoring? Collected history stays in the database.",
+        "pl": "Usunąć tę domenę? Wszystkie zebrane dane (raporty DMARC, odbicia, wyniki DNS, blacklisty) zostaną trwale skasowane.",
+        "en": "Delete this domain? All collected data (DMARC reports, bounces, DNS results, blacklist checks) will be permanently deleted.",
     },
     "confirm.delete_mailbox": {
         "pl": "Usunąć tę skrzynkę? Zapisane hasło zostanie skasowane.",

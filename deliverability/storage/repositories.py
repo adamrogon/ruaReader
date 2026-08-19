@@ -829,13 +829,32 @@ class DomainConfigRepository(_BaseRepository):
             )
 
     def delete(self, domain_id: int) -> None:
-        """Remove a domain from monitoring.
+        """Remove a domain and everything collected under its name.
 
-        Collected history (reports, bounces, DNS checks) is deliberately left
-        in place — it is keyed by domain name, so re-adding the domain later
-        picks its past straight back up.
+        Deleting a domain here means deleting it: DMARC reports/records,
+        bounces, DNS checks and blacklist checks for that domain name are
+        wiped along with it, so nothing lingers to resurface later (e.g. in
+        "unknown domains in reports").
         """
+        row = self.get(domain_id)
         with self.db.connect() as conn:
+            if row:
+                name = row["name"]
+                conn.execute(dmarc_records.delete().where(
+                    and_(dmarc_records.c.project_id == self.project_id, dmarc_records.c.policy_domain == name)
+                ))
+                conn.execute(dmarc_reports.delete().where(
+                    and_(dmarc_reports.c.project_id == self.project_id, dmarc_reports.c.policy_domain == name)
+                ))
+                conn.execute(bounces.delete().where(
+                    and_(bounces.c.project_id == self.project_id, bounces.c.sending_domain == name)
+                ))
+                conn.execute(dns_checks.delete().where(
+                    and_(dns_checks.c.project_id == self.project_id, dns_checks.c.domain == name)
+                ))
+                conn.execute(blacklist_checks.delete().where(
+                    and_(blacklist_checks.c.project_id == self.project_id, blacklist_checks.c.domain == name)
+                ))
             conn.execute(
                 domains_table.delete().where(
                     and_(domains_table.c.id == domain_id, domains_table.c.project_id == self.project_id)
