@@ -329,14 +329,18 @@ function loadVolumeChart(domains) {
           {
             // order pulls these above the bars (higher order draws later, on
             // top); thicker + solid points so a small count doesn't get lost
-            // against a much taller bar.
-            label: L.spfFail, data: d.spf_fail, type: 'line', order: 3,
+            // against a much taller bar. yAxisID: 'y2' — its own axis, scaled
+            // only to these two series, not the message-count axis (sharing
+            // it squashed a count of a few dozen into a couple of pixels
+            // against hundreds of messages, at which point any two counts
+            // both just look like "basically zero").
+            label: L.spfFail, data: d.spf_fail, type: 'line', order: 3, yAxisID: 'y2',
             borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
             borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
             tension: 0.3, borderDash: [6, 3],
           },
           {
-            label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3,
+            label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3, yAxisID: 'y2',
             borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
             borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
             tension: 0.3, borderDash: [6, 3],
@@ -355,6 +359,7 @@ function loadVolumeChart(domains) {
             position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
             title: { display: true, text: L.axisCompliance },
           },
+          y2: { display: false, beginAtZero: true, grace: '20%' },
         },
       },
     });

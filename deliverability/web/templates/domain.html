@@ -432,14 +432,18 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
         {
           // order pulls these above the bars (higher order draws later, on
           // top); thicker + solid points so a small count doesn't get lost
-          // against a much taller bar.
-          label: L.spfFail, data: d.spf_fail, type: 'line', order: 3,
+          // against a much taller bar. yAxisID: 'y2' — its own axis, scaled
+          // only to these two series, not the message-count axis. Sharing
+          // the 'y' axis (hundreds of messages) squashed a count of a few
+          // dozen down to a sliver a couple of pixels tall, at which point
+          // 62 and 4 look identical — both are "basically zero" against 400.
+          label: L.spfFail, data: d.spf_fail, type: 'line', order: 3, yAxisID: 'y2',
           borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
           borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
           tension: 0.3, borderDash: [6, 3],
         },
         {
-          label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3,
+          label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3, yAxisID: 'y2',
           borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
           borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
           tension: 0.3, borderDash: [6, 3],
@@ -455,6 +459,9 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
         x: { stacked: true, grid: { display: false } },
         y: { stacked: true, beginAtZero: true },
         y1: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false } },
+        // Hidden — exists purely so SPF/DKIM Fail get their own vertical
+        // range instead of being flattened by the message-count scale.
+        y2: { display: false, beginAtZero: true, grace: '20%' },
       },
     },
   });
