@@ -318,9 +318,9 @@ function loadVolumeChart(domains) {
       data: {
         labels: d.labels,
         datasets: [
-          { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2, order: 1 },
-          { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2, order: 1 },
-          { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2, order: 1 },
+          { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2, order: 3 },
+          { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2, order: 3 },
+          { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2, order: 3 },
           {
             label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1', order: 2,
             borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
@@ -334,13 +334,13 @@ function loadVolumeChart(domains) {
             // it squashed a count of a few dozen into a couple of pixels
             // against hundreds of messages, at which point any two counts
             // both just look like "basically zero").
-            label: L.spfFail, data: d.spf_fail, type: 'line', order: 3, yAxisID: 'y2',
+            label: L.spfFail, data: d.spf_fail, type: 'line', order: 0, yAxisID: 'y2',
             borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
             borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
             tension: 0.3, borderDash: [6, 3],
           },
           {
-            label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3, yAxisID: 'y2',
+            label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 0, yAxisID: 'y2',
             borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
             borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
             tension: 0.3, borderDash: [6, 3],

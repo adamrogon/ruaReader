@@ -421,9 +421,9 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
     data: {
       labels: d.labels,
       datasets: [
-        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2, order: 1 },
-        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2, order: 1 },
-        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2, order: 1 },
+        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2, order: 3 },
+        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2, order: 3 },
+        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2, order: 3 },
         {
           label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1', order: 2,
           borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
@@ -437,13 +437,13 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
           // the 'y' axis (hundreds of messages) squashed a count of a few
           // dozen down to a sliver a couple of pixels tall, at which point
           // 62 and 4 look identical — both are "basically zero" against 400.
-          label: L.spfFail, data: d.spf_fail, type: 'line', order: 3, yAxisID: 'y2',
+          label: L.spfFail, data: d.spf_fail, type: 'line', order: 0, yAxisID: 'y2',
           borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
           borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
           tension: 0.3, borderDash: [6, 3],
         },
         {
-          label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3, yAxisID: 'y2',
+          label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 0, yAxisID: 'y2',
           borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
           borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
           tension: 0.3, borderDash: [6, 3],
