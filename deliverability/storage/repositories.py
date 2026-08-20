@@ -126,6 +126,118 @@ class DmarcRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def daily_alignment_failures(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
+        """Per-day SPF/DKIM *alignment* failure volume — the metric other DMARC
+        dashboards usually label "SPF Fail"/"DKIM Fail".
+
+        Deliberately not the same as raw spf_result/dkim_result: a message can
+        fail the raw check but still align (or vice versa isn't possible, but
+        alignment is the field that actually gates DMARC pass/fail), and a
+        message failing SPF alignment routinely still passes DMARC overall via
+        DKIM — see classify/forwarding.py. These two counts are shown as
+        overlay lines alongside the pass/forwarded/failed stack, not as
+        another slice of it, because they are not mutually exclusive with
+        "passed".
+        """
+        day = func.date(dmarc_records.c.date_begin).label("day")
+        conditions = [
+            dmarc_records.c.project_id == self.project_id,
+            dmarc_records.c.date_begin >= since,
+        ]
+        if isinstance(domain, str):
+            conditions.append(dmarc_records.c.policy_domain == domain)
+        elif domain:
+            conditions.append(dmarc_records.c.policy_domain.in_(domain))
+
+        stmt = (
+            select(
+                day,
+                dmarc_records.c.policy_domain.label("domain"),
+                func.sum(
+                    case((dmarc_records.c.spf_aligned.is_(False), dmarc_records.c.message_count), else_=0)
+                ).label("spf_fail"),
+                func.sum(
+                    case((dmarc_records.c.dkim_aligned.is_(False), dmarc_records.c.message_count), else_=0)
+                ).label("dkim_fail"),
+            )
+            .where(and_(*conditions))
+            .group_by(day, dmarc_records.c.policy_domain)
+            .order_by(day)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def records_for_day(self, domain: str, day: dt.date) -> List[Dict[str, Any]]:
+        """Every DMARC record for one domain on one calendar day (UTC) — the
+        drill-down behind a click on a daily chart point: which reporting
+        org, which source, and exactly what failed.
+        """
+        start = dt.datetime(day.year, day.month, day.day)
+        end = start + dt.timedelta(days=1)
+        conditions = [
+            dmarc_records.c.project_id == self.project_id,
+            dmarc_records.c.policy_domain == domain,
+            dmarc_records.c.date_begin >= start,
+            dmarc_records.c.date_begin < end,
+        ]
+        stmt = (
+            select(
+                dmarc_records.c.org_name,
+                dmarc_records.c.source_ip,
+                dmarc_records.c.source_host,
+                dmarc_records.c.source_esp,
+                dmarc_records.c.spf_result,
+                dmarc_records.c.spf_aligned,
+                dmarc_records.c.dkim_result,
+                dmarc_records.c.dkim_aligned,
+                dmarc_records.c.evaluation,
+                dmarc_records.c.evaluation_reason,
+                dmarc_records.c.message_count,
+            )
+            .where(and_(*conditions))
+            .order_by(desc(dmarc_records.c.message_count))
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def domain_summary_for_day(self, day: dt.date) -> List[Dict[str, Any]]:
+        """Per-domain rollup for one calendar day, across every domain —
+        answers "which domain caused this fleet-wide spike" without opening
+        each domain one at a time.
+        """
+        start = dt.datetime(day.year, day.month, day.day)
+        end = start + dt.timedelta(days=1)
+        conditions = [
+            dmarc_records.c.project_id == self.project_id,
+            dmarc_records.c.date_begin >= start,
+            dmarc_records.c.date_begin < end,
+        ]
+        stmt = (
+            select(
+                dmarc_records.c.policy_domain.label("domain"),
+                func.sum(dmarc_records.c.message_count).label("messages"),
+                func.sum(
+                    case((dmarc_records.c.evaluation == "pass", dmarc_records.c.message_count), else_=0)
+                ).label("compliant"),
+                func.sum(
+                    case((dmarc_records.c.evaluation == "failed", dmarc_records.c.message_count), else_=0)
+                ).label("failed"),
+                func.sum(
+                    case((dmarc_records.c.spf_aligned.is_(False), dmarc_records.c.message_count), else_=0)
+                ).label("spf_fail"),
+                func.sum(
+                    case((dmarc_records.c.dkim_aligned.is_(False), dmarc_records.c.message_count), else_=0)
+                ).label("dkim_fail"),
+            )
+            .where(and_(*conditions))
+            .group_by(dmarc_records.c.policy_domain)
+            .order_by(desc("messages"))
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
     def compliance_by_domain(self, since: dt.datetime) -> List[Dict[str, Any]]:
         """Per-domain totals by evaluation outcome.
 
@@ -455,6 +567,31 @@ class BounceRepository(_BaseRepository):
             .where(and_(*conditions))
             .group_by(day, bounces.c.sending_domain, bounces.c.bounce_class)
             .order_by(day)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def counts_by_class_for_day(self, day: dt.date, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Bounce class counts for one calendar day (UTC) — the bounce half of
+        a daily-chart drill-down, alongside DmarcRepository.records_for_day().
+        """
+        start = dt.datetime(day.year, day.month, day.day)
+        end = start + dt.timedelta(days=1)
+        conditions = [
+            bounces.c.project_id == self.project_id,
+            bounces.c.received_at >= start,
+            bounces.c.received_at < end,
+        ]
+        if domain:
+            conditions.append(bounces.c.sending_domain == domain)
+        stmt = (
+            select(
+                bounces.c.sending_domain.label("domain"),
+                bounces.c.bounce_class,
+                func.count(bounces.c.id).label("count"),
+            )
+            .where(and_(*conditions))
+            .group_by(bounces.c.sending_domain, bounces.c.bounce_class)
         )
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))

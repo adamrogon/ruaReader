@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if domain is defined %}{{ domain }} — {{ day }}{% else %}{{ t('day.title_fleet', date=day) }}{% endif %}
+  · Deliverability Monitor
+{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    {% if domain is defined %}
+      <a class="back-link" href="/domain/{{ domain }}?lang={{ lang }}&days={{ back_days }}">{{ t('day.back_domain', domain=domain) }}</a>
+      <h1 style="margin-top:6px">{{ t('day.title_domain', domain=domain, date=day) }}</h1>
+      <p>{{ t('day.subtitle_domain') }}</p>
+    {% else %}
+      <a class="back-link" href="/?lang={{ lang }}&days={{ back_days }}">{{ t('day.back_overview') }}</a>
+      <h1 style="margin-top:6px">{{ t('day.title_fleet', date=day) }}</h1>
+      <p>{{ t('day.subtitle_fleet') }}</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if domain is defined %}
+  {# --- Per-domain: bounce summary + full record breakdown for this day --- #}
+  <h2>{{ t('day.bounces_summary') }}</h2>
+  {% if bounce_total %}
+    <div class="kpi-panel">
+      <div class="kpis">
+        <div class="kpi {{ 'is-critical' if bounce_classes.get('sender_block') else '' }}">
+          <div class="kpi-label">{{ t('chart.legend.sender_block') }}</div>
+          <div class="kpi-value">{{ bounce_classes.get('sender_block', 0) }}</div>
+        </div>
+        <div class="kpi {{ 'is-warning' if bounce_classes.get('hard') else '' }}">
+          <div class="kpi-label">{{ t('chart.legend.hard') }}</div>
+          <div class="kpi-value">{{ bounce_classes.get('hard', 0) }}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">{{ t('chart.legend.soft') }}</div>
+          <div class="kpi-value">{{ bounce_classes.get('soft', 0) }}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">{{ t('chart.legend.unparsed') }}</div>
+          <div class="kpi-value">{{ bounce_classes.get('unknown', 0) }}</div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">{{ t('day.no_bounces') }}</div>
+  {% endif %}
+
+  <h2 style="margin-top:32px">{{ t('section.by_provider') }}</h2>
+  {% if records %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left">{{ t('table.provider') }}</th>
+            <th style="text-align:left">{{ t('table.source_ip') }}</th>
+            <th style="text-align:left">{{ t('table.host') }}</th>
+            <th style="text-align:left">{{ t('table.esp') }}</th>
+            <th style="text-align:left">{{ t('table.spf') }}</th>
+            <th style="text-align:left">{{ t('table.dkim') }}</th>
+            <th style="text-align:left">{{ t('table.compliance') }}</th>
+            <th>{{ t('table.messages') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+            <tr>
+              <td style="text-align:left">{{ r.org_name }}</td>
+              <td style="text-align:left" class="mono">{{ r.source_ip }}</td>
+              <td style="text-align:left" class="num-dim truncate">{{ r.source_host or '—' }}</td>
+              <td style="text-align:left">{{ r.source_esp or '—' }}</td>
+              <td style="text-align:left" class="{{ 'num-ok' if r.spf_aligned else 'num-bad' }}">{{ r.spf_result or '—' }}</td>
+              <td style="text-align:left" class="{{ 'num-ok' if r.dkim_aligned else 'num-bad' }}">{{ r.dkim_result or '—' }}</td>
+              <td style="text-align:left">
+                {% if r.evaluation == 'pass' %}<span class="badge ok">{{ t('table.passed') }}</span>
+                {% elif r.evaluation == 'forwarded' %}<span class="badge">{{ t('table.forwarded') }}</span>
+                {% else %}<span class="badge critical">{{ t('table.failed') }}</span>{% endif %}
+              </td>
+              <td>{{ "{:,}".format(r.message_count) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">{{ t('day.no_dmarc_data') }}</div>
+  {% endif %}
+
+{% else %}
+  {# --- Fleet-wide: per-domain rollup for this day ------------------------ #}
+  {% if rows %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left">{{ t('table.domain') }}</th>
+            <th>{{ t('table.messages') }}</th>
+            <th>{{ t('table.passed') }}</th>
+            <th>{{ t('table.failed') }}</th>
+            <th>{{ t('table.spf_fail') }}</th>
+            <th>{{ t('table.dkim_fail') }}</th>
+            <th>{{ t('chart.legend.sender_block') }}</th>
+            <th>{{ t('chart.legend.hard') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td style="text-align:left">
+                <a href="/domain/{{ r.domain }}/day/{{ day }}?lang={{ lang }}">{{ r.domain }}</a>
+              </td>
+              <td>{{ "{:,}".format(r.messages) }}</td>
+              <td class="num-ok">{{ "{:,}".format(r.compliant) }}</td>
+              <td class="{{ 'num-bad' if r.failed else 'num-dim' }}">{{ "{:,}".format(r.failed) }}</td>
+              <td class="{{ 'num-warn' if r.spf_fail else 'num-dim' }}">{{ "{:,}".format(r.spf_fail) }}</td>
+              <td class="{{ 'num-warn' if r.dkim_fail else 'num-dim' }}">{{ "{:,}".format(r.dkim_fail) }}</td>
+              <td class="{{ 'num-bad' if r.bounces_sender_block else 'num-dim' }}">{{ r.bounces_sender_block }}</td>
+              <td class="{{ 'num-warn' if r.bounces_hard else 'num-dim' }}">{{ r.bounces_hard }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">{{ t('day.no_domain_activity') }}</div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

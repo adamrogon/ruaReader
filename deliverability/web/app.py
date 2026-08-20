@@ -423,6 +423,106 @@ def domain_detail(
     )
 
 
+@app.get("/day/{date}")
+def day_detail_fleet(request: Request, date: str):
+    """Fleet-wide drill-down for one calendar day — which domain(s) actually
+    drove a spike or dip in the overview's daily chart, without opening every
+    domain one at a time.
+    """
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    try:
+        day = dt.date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Invalid date: {date}")
+
+    dmarc_repo = DmarcRepository(ctx["database"], ctx["settings"].project_id)
+    bounce_repo = BounceRepository(ctx["database"], ctx["settings"].project_id)
+
+    domain_rows = dmarc_repo.domain_summary_for_day(day)
+    bounce_rows = bounce_repo.counts_by_class_for_day(day)
+    bounces_by_domain: Dict[str, Dict[str, int]] = defaultdict(dict)
+    for row in bounce_rows:
+        bounces_by_domain[row["domain"]][row["bounce_class"]] = row["count"]
+
+    rows = []
+    for row in domain_rows:
+        classes = bounces_by_domain.get(row["domain"], {})
+        rows.append(
+            {
+                **row,
+                "bounces_total": sum(classes.values()),
+                "bounces_sender_block": classes.get("sender_block", 0),
+                "bounces_hard": classes.get("hard", 0),
+            }
+        )
+    # Domains with only bounce activity and no DMARC records that day still
+    # belong on this page.
+    seen = {r["domain"] for r in rows}
+    for domain_name, classes in bounces_by_domain.items():
+        if domain_name not in seen:
+            rows.append(
+                {
+                    "domain": domain_name,
+                    "messages": 0,
+                    "compliant": 0,
+                    "failed": 0,
+                    "spf_fail": 0,
+                    "dkim_fail": 0,
+                    "bounces_total": sum(classes.values()),
+                    "bounces_sender_block": classes.get("sender_block", 0),
+                    "bounces_hard": classes.get("hard", 0),
+                }
+            )
+    rows.sort(key=lambda r: (-r["bounces_sender_block"], -r["failed"], -r["bounces_total"]))
+
+    return _render(
+        request,
+        "day.html",
+        lang,
+        {
+            "day": date,
+            "fleet_wide": True,
+            "rows": rows,
+            "back_days": DEFAULT_WINDOW_DAYS,
+        },
+    )
+
+
+@app.get("/domain/{domain}/day/{date}")
+def day_detail_domain(request: Request, domain: str, date: str):
+    """Per-domain drill-down for one calendar day — the reporting orgs and
+    sources behind a click on that domain's own daily chart point.
+    """
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    try:
+        day = dt.date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Invalid date: {date}")
+
+    dmarc_repo = DmarcRepository(ctx["database"], ctx["settings"].project_id)
+    bounce_repo = BounceRepository(ctx["database"], ctx["settings"].project_id)
+
+    records = dmarc_repo.records_for_day(domain, day)
+    bounce_rows = bounce_repo.counts_by_class_for_day(day, domain=domain)
+    bounce_classes = {row["bounce_class"]: row["count"] for row in bounce_rows}
+
+    return _render(
+        request,
+        "day.html",
+        lang,
+        {
+            "day": date,
+            "domain": domain,
+            "records": records,
+            "bounce_classes": bounce_classes,
+            "bounce_total": sum(bounce_classes.values()),
+            "back_days": DEFAULT_WINDOW_DAYS,
+        },
+    )
+
+
 @app.post("/domain/{domain}/flags/dismiss")
 def dismiss_flag(
     request: Request,
@@ -455,6 +555,7 @@ def api_volume(domain: Optional[List[str]] = Query(None), days: int = Query(14, 
     ctx = _context()
     repo = DmarcRepository(ctx["database"], ctx["settings"].project_id)
     rows = repo.daily_volume(_since(days), domain)
+    alignment_rows = repo.daily_alignment_failures(_since(days), domain)
 
     axis = _date_axis(days)
     series = {key: {day: 0 for day in axis} for key in ("pass", "forwarded", "failed")}
@@ -462,6 +563,18 @@ def api_volume(domain: Optional[List[str]] = Query(None), days: int = Query(14, 
         day = _day_key(row["day"])
         if day in series[row["evaluation"]]:
             series[row["evaluation"]][day] += row["messages"] or 0
+
+    # SPF Fail / DKIM Fail are alignment failures (see daily_alignment_failures'
+    # docstring) — overlaid lines, not another slice of the pass/forwarded/failed
+    # stack, since a message can fail alignment on one mechanism and still pass
+    # DMARC overall via the other.
+    spf_fail = {day: 0 for day in axis}
+    dkim_fail = {day: 0 for day in axis}
+    for row in alignment_rows:
+        day = _day_key(row["day"])
+        if day in spf_fail:
+            spf_fail[day] += row["spf_fail"] or 0
+            dkim_fail[day] += row["dkim_fail"] or 0
 
     compliance = []
     for day in axis:
@@ -475,6 +588,8 @@ def api_volume(domain: Optional[List[str]] = Query(None), days: int = Query(14, 
             "passed": [series["pass"][d] for d in axis],
             "forwarded": [series["forwarded"][d] for d in axis],
             "failed": [series["failed"][d] for d in axis],
+            "spf_fail": [spf_fail[d] for d in axis],
+            "dkim_fail": [dkim_fail[d] for d in axis],
             "compliance": compliance,
         }
     )

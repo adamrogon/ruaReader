@@ -396,12 +396,24 @@
 <script>
 const DAYS = {{ days }};
 const DOMAIN = {{ domain | tojson }};
+const LANG = {{ lang | tojson }};
 const L = {
   passed: {{ t('chart.legend.passed') | tojson }},
   forwarded: {{ t('chart.legend.forwarded') | tojson }},
   failed: {{ t('chart.legend.failed') | tojson }},
   compliance: {{ t('chart.legend.compliance') | tojson }},
+  spfFail: {{ t('table.spf_fail') | tojson }},
+  dkimFail: {{ t('table.dkim_fail') | tojson }},
 };
+
+// Clicking any point/bar drills into that exact day — which reporting org,
+// which source, and exactly what failed. Works for both the stacked bars and
+// the overlay lines since they share one chart.
+function goToDay(evt, elements, chart) {
+  if (!elements.length) return;
+  const date = chart.data.labels[elements[0].index];
+  window.location.href = `/domain/${encodeURIComponent(DOMAIN)}/day/${date}?lang=${LANG}`;
+}
 
 fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()).then(d => {
   new Chart(document.getElementById('volumeChart'), {
@@ -417,11 +429,23 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
           borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
           borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
         },
+        {
+          label: L.spfFail, data: d.spf_fail, type: 'line',
+          borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
+          borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+        },
+        {
+          label: L.dkimFail, data: d.dkim_fail, type: 'line',
+          borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
+          borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+        },
       ],
     },
     options: {
       interaction: { mode: 'index', intersect: false },
       plugins: { tooltip: TOOLTIP },
+      onClick: goToDay,
+      onHover: (evt, elements, chart) => { chart.canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
       scales: {
         x: { stacked: true, grid: { display: false } },
         y: { stacked: true, beginAtZero: true },

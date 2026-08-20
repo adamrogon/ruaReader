@@ -152,6 +152,28 @@ MESSAGES: dict = {
 
     # --- Domain detail page ------------------------------------------------
     "domain.back": {"pl": "‹ Wszystkie domeny", "en": "‹ All domains"},
+
+    "day.back_overview": {"pl": "‹ Przegląd", "en": "‹ Overview"},
+    "day.back_domain": {"pl": "‹ {domain}", "en": "‹ {domain}"},
+    "day.title_fleet": {"pl": "Wszystkie domeny — {date}", "en": "All domains — {date}"},
+    "day.title_domain": {"pl": "{domain} — {date}", "en": "{domain} — {date}"},
+    "day.subtitle_fleet": {
+        "pl": "Który dostawca i która domena — rozbicie tego jednego dnia po domenach.",
+        "en": "Which provider and which domain — this one day, broken down by domain.",
+    },
+    "day.subtitle_domain": {
+        "pl": "Wszystkie źródła raportujące ten dzień, z wynikiem SPF/DKIM dla każdego.",
+        "en": "Every source that reported this day, with the SPF/DKIM result for each.",
+    },
+    "day.no_dmarc_data": {"pl": "Brak danych DMARC dla tego dnia.", "en": "No DMARC data for this day."},
+    "day.no_domain_activity": {"pl": "Żadna domena nie miała aktywności tego dnia.", "en": "No domain had activity this day."},
+    "day.bounces_summary": {"pl": "Odbicia tego dnia", "en": "Bounces this day"},
+    "day.no_bounces": {"pl": "Brak odbić tego dnia.", "en": "No bounces this day."},
+    "table.domain": {"pl": "Domena", "en": "Domain"},
+    "table.spf_fail": {"pl": "SPF Fail", "en": "SPF Fail"},
+    "table.dkim_fail": {"pl": "DKIM Fail", "en": "DKIM Fail"},
+    "table.reason": {"pl": "Powód", "en": "Reason"},
+    "table.esp": {"pl": "ESP", "en": "ESP"},
     "section.attention": {"pl": "Co wymaga uwagi", "en": "What needs attention"},
     "section.attention_hint": {"pl": "od najpoważniejszych", "en": "most serious first"},
     "section.dismissed": {"pl": "Pominięte", "en": "Dismissed"},

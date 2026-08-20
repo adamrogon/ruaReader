@@ -285,6 +285,8 @@ const L = {
   axisMessages: {{ t('chart.axis.messages') | tojson }},
   axisCompliance: {{ t('chart.axis.compliance') | tojson }},
   axisBounces: {{ t('chart.axis.bounces') | tojson }},
+  spfFail: {{ t('table.spf_fail') | tojson }},
+  dkimFail: {{ t('table.dkim_fail') | tojson }},
 };
 
 let volumeChart = null;
@@ -292,6 +294,15 @@ let bounceChart = null;
 
 function domainQuery(domains) {
   return domains.map(d => `domain=${encodeURIComponent(d)}`).join('&');
+}
+
+// Clicking a day on the fleet-wide chart goes to the per-domain rollup for
+// that day — which domain actually drove the spike, without opening each one
+// by hand.
+function goToFleetDay(evt, elements, chart) {
+  if (!elements.length) return;
+  const date = chart.data.labels[elements[0].index];
+  window.location.href = `/day/${date}?lang=${LANG}`;
 }
 
 function loadVolumeChart(domains) {
@@ -315,11 +326,23 @@ function loadVolumeChart(domains) {
             borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
             borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
           },
+          {
+            label: L.spfFail, data: d.spf_fail, type: 'line',
+            borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
+            borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+          },
+          {
+            label: L.dkimFail, data: d.dkim_fail, type: 'line',
+            borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
+            borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+          },
         ],
       },
       options: {
         interaction: { mode: 'index', intersect: false },
         plugins: { tooltip: TOOLTIP },
+        onClick: goToFleetDay,
+        onHover: (evt, elements, chart) => { chart.canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
         scales: {
           x: { stacked: true, grid: { display: false } },
           y: { stacked: true, beginAtZero: true, title: { display: true, text: L.axisMessages } },
