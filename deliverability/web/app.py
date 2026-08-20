@@ -423,8 +423,27 @@ def domain_detail(
     )
 
 
+# Whitelisted so a bad ?sort= value can't do anything worse than fall back
+# to the default — never build a sort expression from raw user input.
+_DAY_SORT_KEYS: Dict[str, Any] = {
+    "domain": lambda r: (r["domain"] or "").lower(),
+    "messages": lambda r: r["messages"],
+    "compliant": lambda r: r["compliant"],
+    "failed": lambda r: r["failed"],
+    "spf_fail": lambda r: r["spf_fail"],
+    "dkim_fail": lambda r: r["dkim_fail"],
+    "bounces_sender_block": lambda r: r["bounces_sender_block"],
+    "bounces_hard": lambda r: r["bounces_hard"],
+}
+
+
 @app.get("/day/{date}")
-def day_detail_fleet(request: Request, date: str):
+def day_detail_fleet(
+    request: Request,
+    date: str,
+    sort: str = Query("severity"),
+    order: str = Query("desc"),
+):
     """Fleet-wide drill-down for one calendar day — which domain(s) actually
     drove a spike or dip in the overview's daily chart, without opening every
     domain one at a time.
@@ -474,7 +493,15 @@ def day_detail_fleet(request: Request, date: str):
                     "bounces_hard": classes.get("hard", 0),
                 }
             )
-    rows.sort(key=lambda r: (-r["bounces_sender_block"], -r["failed"], -r["bounces_total"]))
+    if sort in _DAY_SORT_KEYS:
+        rows.sort(key=_DAY_SORT_KEYS[sort], reverse=(order != "asc"))
+        active_sort, active_order = sort, ("asc" if order == "asc" else "desc")
+    else:
+        # Default: severity — sender blocks first, then raw failures, then
+        # bounce volume. Not a single column, so it isn't in the whitelist
+        # above; "severity" just means "whatever ?sort= didn't override".
+        rows.sort(key=lambda r: (-r["bounces_sender_block"], -r["failed"], -r["bounces_total"]))
+        active_sort, active_order = "severity", "desc"
 
     return _render(
         request,
@@ -484,6 +511,8 @@ def day_detail_fleet(request: Request, date: str):
             "day": date,
             "fleet_wide": True,
             "rows": rows,
+            "sort": active_sort,
+            "order": active_order,
             "back_days": DEFAULT_WINDOW_DAYS,
         },
     )

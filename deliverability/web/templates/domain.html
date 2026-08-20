@@ -421,23 +421,28 @@ fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r =>
     data: {
       labels: d.labels,
       datasets: [
-        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2 },
-        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2 },
-        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2 },
+        { label: L.passed, data: d.passed, backgroundColor: PALETTE.pass, stack: 's', borderRadius: 2, order: 1 },
+        { label: L.forwarded, data: d.forwarded, backgroundColor: PALETTE.forwarded, stack: 's', borderRadius: 2, order: 1 },
+        { label: L.failed, data: d.failed, backgroundColor: PALETTE.failed, stack: 's', borderRadius: 2, order: 1 },
         {
-          label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1',
+          label: L.compliance, data: d.compliance, type: 'line', yAxisID: 'y1', order: 2,
           borderColor: PALETTE.accent, backgroundColor: PALETTE.accent,
           borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
         },
         {
-          label: L.spfFail, data: d.spf_fail, type: 'line',
+          // order pulls these above the bars (higher order draws later, on
+          // top); thicker + solid points so a small count doesn't get lost
+          // against a much taller bar.
+          label: L.spfFail, data: d.spf_fail, type: 'line', order: 3,
           borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
-          borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+          borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+          tension: 0.3, borderDash: [6, 3],
         },
         {
-          label: L.dkimFail, data: d.dkim_fail, type: 'line',
+          label: L.dkimFail, data: d.dkim_fail, type: 'line', order: 3,
           borderColor: PALETTE.dkimFail, backgroundColor: PALETTE.dkimFail,
-          borderWidth: 1.5, pointRadius: 1.5, tension: 0.3, borderDash: [4, 3],
+          borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+          tension: 0.3, borderDash: [6, 3],
         },
       ],
     },

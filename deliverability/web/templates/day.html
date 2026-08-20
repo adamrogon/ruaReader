@@ -90,19 +90,32 @@
 
 {% else %}
   {# --- Fleet-wide: per-domain rollup for this day ------------------------ #}
+  {% macro day_sort_url(col, default_order='desc') %}
+    {%- set new_order = ('asc' if order == 'desc' else 'desc') if sort == col else default_order %}
+/day/{{ day }}?lang={{ lang }}&sort={{ col }}&order={{ new_order }}
+  {%- endmacro %}
+  {% macro day_sort_th(col, label, default_order='desc', align='right') %}
+    {%- set is_active = sort == col %}
+    {%- set arrow = ('↑' if order == 'asc' else '↓') if is_active else '' %}
+    <th style="text-align:{{ align }}">
+      <a class="sort-link {{ 'is-active' if is_active }}" href="{{ day_sort_url(col, default_order) | trim }}">
+        {{ label }} <span class="sort-arrow">{{ arrow or '↕' }}</span>
+      </a>
+    </th>
+  {% endmacro %}
   {% if rows %}
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th style="text-align:left">{{ t('table.domain') }}</th>
-            <th>{{ t('table.messages') }}</th>
-            <th>{{ t('table.passed') }}</th>
-            <th>{{ t('table.failed') }}</th>
-            <th>{{ t('table.spf_fail') }}</th>
-            <th>{{ t('table.dkim_fail') }}</th>
-            <th>{{ t('chart.legend.sender_block') }}</th>
-            <th>{{ t('chart.legend.hard') }}</th>
+            {{ day_sort_th('domain', t('table.domain'), 'asc', 'left') }}
+            {{ day_sort_th('messages', t('table.messages')) }}
+            {{ day_sort_th('compliant', t('table.passed')) }}
+            {{ day_sort_th('failed', t('table.failed')) }}
+            {{ day_sort_th('spf_fail', t('table.spf_fail')) }}
+            {{ day_sort_th('dkim_fail', t('table.dkim_fail')) }}
+            {{ day_sort_th('bounces_sender_block', t('chart.legend.sender_block')) }}
+            {{ day_sort_th('bounces_hard', t('chart.legend.hard')) }}
           </tr>
         </thead>
         <tbody>
