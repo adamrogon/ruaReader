@@ -19,9 +19,11 @@ from .schema import (
     dmarc_records,
     dmarc_reports,
     dns_checks,
+    domain_folders,
     ingestion_runs,
 )
 from .schema import domains as domains_table
+from .schema import folders as folders_table
 from .schema import mailboxes as mailboxes_table
 
 
@@ -294,7 +296,9 @@ class DmarcRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
-    def other_esp_org_breakdown(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+    def other_esp_org_breakdown(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
         """Which real reporting organisations are hiding inside the "Other"
         ESP bucket, and how much volume each sent.
 
@@ -311,8 +315,10 @@ class DmarcRepository(_BaseRepository):
             dmarc_records.c.date_begin >= since,
             dmarc_records.c.receiving_esp == "Other",
         ]
-        if domain:
+        if isinstance(domain, str):
             conditions.append(dmarc_records.c.policy_domain == domain)
+        elif domain:
+            conditions.append(dmarc_records.c.policy_domain.in_(domain))
 
         stmt = (
             select(
@@ -1036,6 +1042,9 @@ class DomainConfigRepository(_BaseRepository):
                 conn.execute(blacklist_checks.delete().where(
                     and_(blacklist_checks.c.project_id == self.project_id, blacklist_checks.c.domain == name)
                 ))
+            conn.execute(domain_folders.delete().where(
+                and_(domain_folders.c.project_id == self.project_id, domain_folders.c.domain_id == domain_id)
+            ))
             conn.execute(
                 domains_table.delete().where(
                     and_(domains_table.c.id == domain_id, domains_table.c.project_id == self.project_id)
@@ -1046,6 +1055,103 @@ class DomainConfigRepository(_BaseRepository):
         stmt = select(func.count(domains_table.c.id)).where(domains_table.c.project_id == self.project_id)
         with self.db.connect() as conn:
             return int(conn.execute(stmt).scalar() or 0)
+
+
+class FolderRepository(_BaseRepository):
+    """Prototype: organisational grouping of domains, many-to-many."""
+
+    def list_all(self) -> List[Dict[str, Any]]:
+        stmt = select(folders_table).where(folders_table.c.project_id == self.project_id).order_by(
+            folders_table.c.name
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def get(self, folder_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(folders_table).where(
+            and_(folders_table.c.id == folder_id, folders_table.c.project_id == self.project_id)
+        )
+        with self.db.connect() as conn:
+            rows = _rows(conn.execute(stmt))
+        return rows[0] if rows else None
+
+    def get_or_create_by_name(self, name: str) -> int:
+        """Used by bulk import: a folder name that doesn't exist yet is
+        created on the spot rather than rejecting the row."""
+        name = name.strip()
+        with self.db.connect() as conn:
+            existing = conn.execute(
+                select(folders_table.c.id).where(
+                    and_(folders_table.c.project_id == self.project_id, folders_table.c.name == name)
+                )
+            ).first()
+            if existing:
+                return existing.id
+            result = conn.execute(
+                folders_table.insert().values(
+                    project_id=self.project_id, name=name, created_at=dt.datetime.now(dt.timezone.utc)
+                )
+            )
+            return int(result.inserted_primary_key[0])
+
+    def create(self, name: str) -> int:
+        with self.db.connect() as conn:
+            result = conn.execute(
+                folders_table.insert().values(
+                    project_id=self.project_id,
+                    name=name.strip(),
+                    created_at=dt.datetime.now(dt.timezone.utc),
+                )
+            )
+            return int(result.inserted_primary_key[0])
+
+    def delete(self, folder_id: int) -> None:
+        """Removing a folder never removes domains — only the assignment."""
+        with self.db.connect() as conn:
+            conn.execute(domain_folders.delete().where(
+                and_(domain_folders.c.project_id == self.project_id, domain_folders.c.folder_id == folder_id)
+            ))
+            conn.execute(folders_table.delete().where(
+                and_(folders_table.c.id == folder_id, folders_table.c.project_id == self.project_id)
+            ))
+
+    def folder_ids_for_domain(self, domain_id: int) -> List[int]:
+        stmt = select(domain_folders.c.folder_id).where(
+            and_(domain_folders.c.project_id == self.project_id, domain_folders.c.domain_id == domain_id)
+        )
+        with self.db.connect() as conn:
+            return [row.folder_id for row in conn.execute(stmt)]
+
+    def set_domain_folders(self, domain_id: int, folder_ids: Sequence[int]) -> None:
+        """Replace a domain's folder assignments wholesale — simplest correct
+        semantics for a checkbox-list form (empty selection means no folders,
+        not 'leave as-is')."""
+        with self.db.connect() as conn:
+            conn.execute(domain_folders.delete().where(
+                and_(domain_folders.c.project_id == self.project_id, domain_folders.c.domain_id == domain_id)
+            ))
+            for fid in set(folder_ids):
+                conn.execute(domain_folders.insert().values(
+                    project_id=self.project_id, domain_id=domain_id, folder_id=fid
+                ))
+
+    def domain_ids_in_folder(self, folder_id: int) -> List[int]:
+        stmt = select(domain_folders.c.domain_id).where(
+            and_(domain_folders.c.project_id == self.project_id, domain_folders.c.folder_id == folder_id)
+        )
+        with self.db.connect() as conn:
+            return [row.domain_id for row in conn.execute(stmt)]
+
+    def domain_counts(self) -> Dict[int, int]:
+        """Domain count per folder, for the folder list page — one query
+        instead of one per folder."""
+        stmt = (
+            select(domain_folders.c.folder_id, func.count(domain_folders.c.domain_id))
+            .where(domain_folders.c.project_id == self.project_id)
+            .group_by(domain_folders.c.folder_id)
+        )
+        with self.db.connect() as conn:
+            return {row[0]: row[1] for row in conn.execute(stmt)}
 
 
 class MailboxConfigRepository(_BaseRepository):

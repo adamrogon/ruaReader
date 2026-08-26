@@ -275,14 +275,18 @@
     <h1>{{ t('settings.title') }}</h1>
     <p>{{ t('settings.subtitle') }}</p>
   </div>
-  <a class="back-link" href="/?lang={{ lang }}">{{ t('domain.back') }}</a>
+  <a class="back-link" href="/?lang={{ lang }}">{{ t('day.back_overview') }}</a>
 </div>
 
 {% set notices = {
   'domain_saved': t('saved.domain'),
   'domain_deleted': t('deleted.domain'),
   'mailbox_saved': t('saved.mailbox'),
-  'mailbox_deleted': t('deleted.mailbox')
+  'mailbox_deleted': t('deleted.mailbox'),
+  'folder_saved': t('saved.folder'),
+  'folder_deleted': t('deleted.folder'),
+  'domain_folders_saved': t('saved.domain_folders'),
+  'bulk_import_done': t('saved.bulk_import')
 } %}
 {% set errors = {
   'required': t('error.required'),
@@ -303,8 +307,87 @@
   <div class="banner banner-warning">{{ t('error.no_secret_key') }}</div>
 {% endif %}
 
+{# --- Bulk import (prototype) ------------------------------------------------ #}
+<h2>{{ t('settings.bulk_import_title') }} <span class="hint">{{ t('settings.bulk_import_hint') }}</span></h2>
+<div class="cfg-row" style="align-items:center">
+  <div class="cfg-main">
+    <a class="btn btn-ghost" href="/settings/bulk-import/template" download>{{ t('btn.download_template') }}</a>
+  </div>
+  <form method="post" action="/settings/bulk-import?lang={{ lang }}" enctype="multipart/form-data" class="cfg-actions" style="align-items:center">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit" class="btn btn-primary">{{ t('btn.upload_import') }}</button>
+  </form>
+</div>
+
+{% if bulk_results %}
+  {% set created = bulk_results | selectattr('status', 'equalto', 'created') | list | length %}
+  {% set skipped = bulk_results | selectattr('status', 'equalto', 'skipped') | list | length %}
+  {% set errored = bulk_results | selectattr('status', 'equalto', 'error') | list | length %}
+  <h3 style="margin:16px 0 8px">{{ t('bulk_import.results_title') }}</h3>
+  <p class="hint">{{ t('bulk_import.summary', created=created, skipped=skipped, errors=errored) }}</p>
+  <div class="table-wrap" style="margin-top:8px">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left">{{ t('bulk_import.row') }}</th>
+          <th style="text-align:left">{{ t('table.domain') }}</th>
+          <th style="text-align:left">{{ t('table.class') }}</th>
+          <th style="text-align:left">{{ t('table.reason') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in bulk_results %}
+          <tr>
+            <td style="text-align:left">{{ r.row }}</td>
+            <td style="text-align:left">{{ r.domain }}</td>
+            <td style="text-align:left">
+              <span class="badge {{ 'ok' if r.status == 'created' else ('neutral' if r.status == 'skipped' else 'critical') }}">
+                {{ t('bulk_import.status.' ~ r.status) }}
+              </span>
+            </td>
+            <td style="text-align:left" class="num-dim">{{ r.reason }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+{# --- Folders (prototype) --------------------------------------------------- #}
+<h2>{{ t('settings.folders_title') }} <span class="hint">{{ t('settings.folders_hint') }}</span></h2>
+
+<div class="cfg-list">
+  {% for f in all_folders %}
+    <div class="cfg-row">
+      <div class="cfg-main">
+        <div class="cfg-name">{{ f.name }}</div>
+      </div>
+      <div class="cfg-actions">
+        <form method="post" action="/settings/folders/{{ f.id }}/delete?lang={{ lang }}"
+              onsubmit="return confirm({{ t('confirm.delete_folder') | tojson }})">
+          <button type="submit" class="btn btn-danger">{{ t('btn.delete') }}</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">{{ t('folders.empty') }}</div>
+  {% endfor %}
+</div>
+
+<form method="post" action="/settings/folders?lang={{ lang }}" class="cfg-form" style="margin-top:12px">
+  <div class="form-grid">
+    <label class="field">
+      <span class="field-label">{{ t('field.folder_name') }}</span>
+      <input type="text" name="name" required autocomplete="off" placeholder="Media">
+    </label>
+  </div>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{ t('btn.save') }}</button>
+  </div>
+</form>
+
 {# --- Domains ------------------------------------------------------------- #}
-<h2>{{ t('settings.domains') }} <span class="hint">{{ t('settings.domains_hint') }}</span></h2>
+<h2 style="margin-top:36px">{{ t('settings.domains') }} <span class="hint">{{ t('settings.domains_hint') }}</span></h2>
 
 <div class="cfg-list">
   {% for item in domains %}
@@ -329,6 +412,23 @@
     </div>
     <div class="cfg-edit" id="dom-edit-{{ item.id }}" hidden>
       {{ domain_form(item, 'domform-' ~ item.id) }}
+      {% if all_folders %}
+        <form method="post" action="/settings/domains/{{ item.id }}/folders?lang={{ lang }}" class="cfg-form" style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--border)">
+          <span class="field-label">{{ t('field.domain_folders') }}</span>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin:8px 0">
+            {% set assigned = folder_ids_by_domain.get(item.id, []) %}
+            {% for f in all_folders %}
+              <label class="field-check" style="padding-top:0">
+                <input type="checkbox" name="folder_ids" value="{{ f.id }}" {{ 'checked' if f.id in assigned }}>
+                <span>{{ f.name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-ghost">{{ t('btn.save') }}</button>
+          </div>
+        </form>
+      {% endif %}
     </div>
   {% else %}
     <div class="empty">{{ t('settings.no_domains') }}</div>

@@ -1,17 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{{ folder.name ~ ' · ' if folder is defined }}{{ t('overview.title') }} · Linkhouse{% endblock %}
+{% block title %}{{ t('folders.title') }} · Linkhouse{% endblock %}
 
 {% block content %}
-{% set base_path = ('/folder/' ~ folder.id) if folder is defined else '/domains' %}
 <div class="page-head">
   <div>
-    <a class="back-link" href="/?lang={{ lang }}&days={{ days }}">{{ t('day.back_overview') }}</a>
-    {% if folder is defined %}
-      <h1 style="margin-top:6px">{{ folder.name }} <span class="badge neutral">{{ t('folders.title') }}</span></h1>
-    {% else %}
-      <h1 style="margin-top:6px">{{ t('overview.title') }}</h1>
-    {% endif %}
-    <p>{{ t('overview.subtitle', days=days) }}</p>
+    <h1>{{ t('folders.title') }}</h1>
+    <p>{{ t('folders.subtitle', days=days) }}</p>
   </div>
   <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
     <div class="run-now">
@@ -20,13 +14,13 @@
     </div>
     <div class="range-picker">
       {% for option in [1, 7, 14, 30] %}
-        <a href="{{ base_path }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+        <a href="/?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
       {% endfor %}
     </div>
   </div>
 </div>
 
-{# --- Fleet totals, in a dark accent panel ------------------------------- #}
+{# --- Fleet totals, across every folder ----------------------------------- #}
 <div class="kpi-panel">
   <div class="kpis">
     <div class="kpi {{ 'is-critical' if totals.sender_blocks else 'is-ok' }}">
@@ -83,32 +77,33 @@
   </div>
 {% endif %}
 
-{# --- Domain list, urgency ordered --------------------------------------- #}
-<h2>{{ t('section.domains') }} <span class="hint">{{ t('section.domains_hint') }}</span></h2>
+{# --- Folder tiles --------------------------------------------------------- #}
+<h2>{{ t('folders.title') }}</h2>
 <div class="domain-list">
-  {% for status in statuses %}
-    {% set m = status.metrics %}
-    <a class="domain-card sev-{{ status.severity }}" href="/domain/{{ status.domain }}?lang={{ lang }}&days={{ days }}">
+  <a class="domain-card sev-ok" href="/domains?lang={{ lang }}&days={{ days }}">
+    <div>
+      <div class="domain-name">{{ t('folders.all_domains') }}</div>
+    </div>
+    <div class="chev">›</div>
+  </a>
+
+  {% for row in rows %}
+    <a class="domain-card sev-{{ 'critical' if row.critical else ('warning' if row.warning else 'ok') }}" href="/folder/{{ row.id }}?lang={{ lang }}&days={{ days }}">
       <div>
-        <div class="domain-name">
-          {{ status.domain }}
-          {% if m.critical_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
-          {% if m.critical_blacklist %}<span class="badge critical">{{ t('badge.blacklisted') }}</span>{% endif %}
-          {% if status.severity == 'ok' %}<span class="badge ok">{{ t('badge.ok') }}</span>{% endif %}
-        </div>
-        <div class="domain-headline">{{ status.headline }}</div>
+        <div class="domain-name">{{ row.name }}</div>
+        <div class="domain-headline">{{ row.domain_count }} {{ t('folders.domain_count') }}</div>
       </div>
 
       <div class="metric">
         <div class="metric-label">{{ t('metric.messages') }}</div>
-        <div class="metric-value {{ 'is-dim' if not m.messages }}">{{ "{:,}".format(m.messages) }}</div>
+        <div class="metric-value {{ 'is-dim' if not row.messages }}">{{ "{:,}".format(row.messages) }}</div>
       </div>
 
       <div class="metric">
         <div class="metric-label">{{ t('metric.compliance') }}</div>
-        {% if m.compliance is not none %}
-          <div class="metric-value {{ 'is-critical' if m.compliance < 0.85 else ('is-warning' if m.compliance < 0.95 else 'is-ok') }}">
-            {{ "%.0f"|format(m.compliance * 100) }}%
+        {% if row.compliance is not none %}
+          <div class="metric-value {{ 'is-critical' if row.compliance < 0.85 else ('is-warning' if row.compliance < 0.95 else 'is-ok') }}">
+            {{ "%.0f"|format(row.compliance * 100) }}%
           </div>
         {% else %}
           <div class="metric-value is-dim">—</div>
@@ -117,108 +112,22 @@
 
       <div class="metric">
         <div class="metric-label">{{ t('metric.bounces') }}</div>
-        <div class="metric-value {{ 'is-critical' if m.critical_sender_block else ('is-warning' if (m.bounces_sender_block or m.bounces_hard) else 'is-dim') }}">
-          {{ m.bounces_total }}
-        </div>
+        <div class="metric-value {{ 'is-warning' if row.bounces_total else 'is-dim' }}">{{ row.bounces_total }}</div>
       </div>
 
       <div class="metric">
-        <div class="metric-label">{{ t('metric.spf_lookups') }}</div>
-        {% if m.spf_lookups is not none %}
-          <div class="metric-value {{ 'is-critical' if m.spf_lookups > m.spf_lookup_limit else ('is-warning' if m.spf_lookups >= 8 else 'is-ok') }}">
-            {{ m.spf_lookups }}/{{ m.spf_lookup_limit }}
-          </div>
-        {% else %}
-          <div class="metric-value is-dim">—</div>
-        {% endif %}
+        <div class="metric-label">{{ t('metric.spf_near_limit') }}</div>
+        <div class="metric-value {{ 'is-warning' if row.spf_near_limit else 'is-dim' }}">{{ row.spf_near_limit }}/{{ row.domain_count }}</div>
       </div>
 
       <div class="chev">›</div>
     </a>
   {% else %}
-    <div class="empty">{{ t('empty.no_domains') }} <span class="mono">config/domains.yml</span>.</div>
+    <div class="empty">{{ t('folders.empty') }}</div>
   {% endfor %}
 </div>
 
-{# --- Per-ESP breakdown across all domains -------------------------------- #}
-<h2>{{ t('section.by_provider') }} <span class="hint">{{ t('section.by_provider_hint') }}</span></h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>{{ t('table.provider') }}</th>
-        <th>{{ t('table.messages') }}</th>
-        <th>{{ t('table.compliance') }}</th>
-        <th>{{ t('table.passed') }}</th>
-        <th>{{ t('table.failed') }}</th>
-        <th>{{ t('table.forwarded') }}</th>
-        <th style="text-align:left">{{ t('table.domains_with_failures') }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in esp_summary %}
-        <tr>
-          <td>
-            {% if row.esp == 'Other' and other_providers %}
-              <details class="other-breakdown">
-                <summary>
-                  <span class="esp-name">
-                    <span class="esp-swatch" style="background: #a3a3a3"></span>
-                    {{ row.esp }}
-                  </span>
-                  <span class="hint">{{ t('esp.other_breakdown_hint') }}</span>
-                </summary>
-                <div class="other-breakdown-list">
-                  {% for p in other_providers[:5] %}
-                    <div class="other-breakdown-item"><span>{{ p.org_name }}</span><span>{{ "{:,}".format(p.messages) }}</span></div>
-                  {% endfor %}
-                  {% if other_providers | length > 5 %}
-                    <details class="other-breakdown-more">
-                      <summary>{{ t('esp.other_show_more', n=other_providers|length - 5) }}</summary>
-                      {% for p in other_providers[5:] %}
-                        <div class="other-breakdown-item"><span>{{ p.org_name }}</span><span>{{ "{:,}".format(p.messages) }}</span></div>
-                      {% endfor %}
-                    </details>
-                  {% endif %}
-                </div>
-              </details>
-            {% else %}
-              <span class="esp-name">
-                {% set logo = esp_logo(row.esp) %}
-                {% if logo %}
-                  <img class="esp-logo" src="{{ logo }}" alt="" width="16" height="16">
-                {% else %}
-                  <span class="esp-swatch" style="background: #a3a3a3"></span>
-                {% endif %}
-                {{ row.esp }}
-              </span>
-            {% endif %}
-          </td>
-          <td>{{ "{:,}".format(row.total) }}</td>
-          <td>
-            {% if row.compliance is not none %}
-              <span class="{{ 'num-bad' if row.compliance < 0.85 else ('num-warn' if row.compliance < 0.95 else 'num-ok') }}">
-                {{ "%.1f"|format(row.compliance * 100) }}%
-              </span>
-            {% else %}<span class="num-dim">—</span>{% endif %}
-          </td>
-          <td class="num-ok">{{ "{:,}".format(row['pass']) }}</td>
-          <td class="{{ 'num-bad' if row.failed else 'num-dim' }}">{{ "{:,}".format(row.failed) }}</td>
-          <td class="num-dim">{{ "{:,}".format(row.forwarded) }}</td>
-          <td style="text-align:left" class="truncate">
-            {% if row.affected_domains %}
-              {{ row.affected_domains | join(', ') }}
-            {% else %}<span class="num-dim">{{ t('table.none') }}</span>{% endif %}
-          </td>
-        </tr>
-      {% else %}
-        <tr><td colspan="7" class="empty">{{ t('empty.no_report_data') }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-{# --- Charts -------------------------------------------------------------- #}
+{# --- Charts, across every folder ----------------------------------------- #}
 <h2>{{ t('section.trends') }}</h2>
 {% if statuses %}
   <div class="domain-filter" id="domain-filter">
@@ -253,8 +162,8 @@ const DAYS = {{ days }};
 const LANG = {{ lang | tojson }};
 const T_RUNNING = {{ t('action.running') | tojson }};
 
-// "Check everything": fire each stream, then poll until none are in flight and
-// reload so the page shows the freshly ingested data.
+// Same "check everything" control as the domain views — global ingestion
+// isn't folder-scoped, so it belongs on the home page too.
 (function () {
   const btn = document.getElementById('run-all');
   const msg = document.getElementById('run-msg');
@@ -275,7 +184,6 @@ const T_RUNNING = {{ t('action.running') | tojson }};
     btn.disabled = true;
     btn.classList.add('is-running');
     msg.innerHTML = '<span class="spin"></span> ' + T_RUNNING;
-    // Bounces are the time-sensitive stream, so they go first.
     for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
       try {
         await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });
@@ -341,13 +249,6 @@ function loadVolumeChart(domains) {
             borderWidth: 2, pointRadius: 2, tension: 0.3, spanGaps: true,
           },
           {
-            // order pulls these above the bars (higher order draws later, on
-            // top); thicker + solid points so a small count doesn't get lost
-            // against a much taller bar. yAxisID: 'y2' — its own axis, scaled
-            // only to these two series, not the message-count axis (sharing
-            // it squashed a count of a few dozen into a couple of pixels
-            // against hundreds of messages, at which point any two counts
-            // both just look like "basically zero").
             label: L.spfFail, data: d.spf_fail, type: 'line', order: 0, yAxisID: 'y2',
             borderColor: PALETTE.spfFail, backgroundColor: PALETTE.spfFail,
             borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
@@ -424,8 +325,6 @@ function loadBounceChart(domains) {
   const summaryText = filterBox.querySelector('.js-domain-filter-summary');
   const T_PICK = {{ t('filter.pick_domains') | tojson }};
 
-  // null = no filter (everything checked); [] = nothing checked, show no
-  // data; otherwise the explicit list of checked domains.
   function selected() {
     const checked = boxes.filter(b => b.checked).map(b => b.value);
     return checked.length === boxes.length ? null : checked;
@@ -451,7 +350,6 @@ function loadBounceChart(domains) {
     refresh();
   }));
 
-  // Close the picker on an outside click, like a normal dropdown.
   document.addEventListener('click', (e) => {
     if (details.open && !details.contains(e.target)) details.open = false;
   });

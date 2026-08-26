@@ -6,7 +6,7 @@
 
 <div class="page-head">
   <div>
-    <a class="back-link" href="/?lang={{ lang }}&days={{ days }}">{{ t('domain.back') }}</a>
+    <a class="back-link" href="/?lang={{ lang }}&days={{ days }}">{{ t('day.back_overview') }}</a>
     <h1 style="margin-top:6px">
       {{ domain }}
       {% if m.critical_sender_block %}<span class="badge critical">{{ t('badge.blocked') }}</span>{% endif %}
@@ -269,6 +269,45 @@
   </div>
 {% else %}
   <div class="empty">{{ t('empty.dns_not_checked') }} <span class="mono">{{ t('run_hint.dns') }}</span>.</div>
+{% endif %}
+
+{# --- Blacklist IPs, full list ---------------------------------------------
+   The flag message above the fold truncates to the first 3 IPs (see
+   health.py) — this is the untruncated source for actually filing delisting
+   requests against a specific IP + list. #}
+<h2>{{ t('section.blacklist_ips') }} <span class="hint">{{ t('section.blacklist_ips_hint') }}</span></h2>
+{% if blacklist_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left">{{ t('table.ip') }}</th>
+          <th style="text-align:left">{{ t('table.source') }}</th>
+          <th style="text-align:left">{{ t('table.status') }}</th>
+          <th style="text-align:left">{{ t('table.blacklists') }}</th>
+          <th style="text-align:left">{{ t('table.last_checked') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in blacklist_rows %}
+          <tr>
+            <td style="text-align:left" class="mono">{{ row.ip }}</td>
+            <td style="text-align:left" class="num-dim">{{ (row.ip_source or '—') | upper }}</td>
+            <td style="text-align:left">
+              {% if row.listed %}<span class="badge critical">{{ t('status.listed') }}</span>
+              {% else %}<span class="badge ok">{{ t('status.clean') }}</span>{% endif %}
+            </td>
+            <td style="text-align:left">
+              {% if row.listed and row.listed_by %}{{ row.listed_by | join(', ') }}{% else %}—{% endif %}
+            </td>
+            <td style="text-align:left" class="num-dim">{{ row.checked_at.strftime('%Y-%m-%d %H:%M') if row.checked_at else '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="empty">{{ t('empty.blacklist_not_checked') }} <span class="mono">{{ t('run_hint.dnsbl') }}</span>.</div>
 {% endif %}
 
 {# --- Failing sources ----------------------------------------------------- #}

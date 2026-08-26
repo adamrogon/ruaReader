@@ -19,6 +19,7 @@ fastapi==0.128.8
 uvicorn==0.39.0
 Jinja2==3.1.6
 python-multipart==0.0.20   # form handling for the Settings screen
+openpyxl==3.1.5            # bulk-import XLSX template + parsing
 
 # cryptography arrives via parsedmarc and is used directly to encrypt mailbox
 # passwords (deliverability/secrets.py); pinned here so that stays deliberate.

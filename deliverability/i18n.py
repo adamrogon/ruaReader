@@ -213,6 +213,22 @@ MESSAGES: dict = {
         "en": "IPs sending as your domain but without valid SPF/DKIM — typically a forgotten former "
         "provider, a new service not yet in SPF, or someone spoofing you. Sourced from DMARC reports.",
     },
+    "section.blacklist_ips": {"pl": "Adresy IP i blacklisty", "en": "IP addresses and blacklists"},
+    "section.blacklist_ips_hint": {
+        "pl": "pełna lista, bez obcięcia do trzech adresów jak w podsumowaniu flagi wyżej",
+        "en": "full list, not truncated to three addresses like the flag summary above",
+    },
+    "table.ip": {"pl": "Adres IP", "en": "IP address"},
+    "table.source": {"pl": "Źródło", "en": "Source"},
+    "table.status": {"pl": "Status", "en": "Status"},
+    "table.blacklists": {"pl": "Blacklisty", "en": "Blacklists"},
+    "table.last_checked": {"pl": "Ostatnio sprawdzono", "en": "Last checked"},
+    "status.clean": {"pl": "Czysty", "en": "Clean"},
+    "status.listed": {"pl": "Zablokowany", "en": "Listed"},
+    "empty.blacklist_not_checked": {
+        "pl": "Brak sprawdzonych adresów IP dla tej domeny jeszcze.",
+        "en": "No checked IP addresses for this domain yet.",
+    },
 
     "kpi.forwarded": {"pl": "Przekierowane", "en": "Forwarded"},
     "kpi.hard_bounces": {"pl": "Twarde odbicia", "en": "Hard bounces"},
@@ -250,6 +266,7 @@ MESSAGES: dict = {
     "dns.selector_missing_suffix": {"pl": " brak", "en": " missing"},
 
     "run_hint.dns": {"pl": "python -m deliverability.cli dns", "en": "python -m deliverability.cli dns"},
+    "run_hint.dnsbl": {"pl": "python -m deliverability.cli dnsbl", "en": "python -m deliverability.cli dnsbl"},
 
     # --- Source labels shown on flags --------------------------------------
     "source.bounce": {"pl": "odbicia", "en": "bounce"},
@@ -880,6 +897,56 @@ MESSAGES: dict = {
     "saved.mailbox": {"pl": "Zapisano skrzynkę.", "en": "Mailbox saved."},
     "deleted.domain": {"pl": "Usunięto domenę.", "en": "Domain removed."},
     "deleted.mailbox": {"pl": "Usunięto skrzynkę.", "en": "Mailbox removed."},
+    "saved.folder": {"pl": "Dodano folder.", "en": "Folder added."},
+    "deleted.folder": {"pl": "Usunięto folder. Domeny zostały, tylko odpięte.", "en": "Folder removed. Domains stayed, just unassigned."},
+    "saved.domain_folders": {"pl": "Zapisano przypisanie do folderów.", "en": "Folder assignment saved."},
+    "saved.bulk_import": {"pl": "Import zakończony — zobacz wyniki poniżej.", "en": "Import finished — see results below."},
+
+    "nav.folders": {"pl": "Foldery", "en": "Folders"},
+    "nav.back_folders": {"pl": "‹ Foldery", "en": "‹ Folders"},
+    "folders.title": {"pl": "Foldery", "en": "Folders"},
+    "folders.subtitle": {
+        "pl": "PROTOTYP — grupowanie domen wg działu (np. Media, Sales). Ostatnie {days} dni.",
+        "en": "PROTOTYPE — group domains by department (e.g. Media, Sales). Last {days} days.",
+    },
+    "folders.empty": {
+        "pl": "Brak folderów. Dodaj pierwszy w Ustawieniach.",
+        "en": "No folders yet. Add the first one in Settings.",
+    },
+    "folders.domain_count": {"pl": "domen", "en": "domains"},
+    "folders.all_domains": {"pl": "Wszystkie domeny (bez podziału)", "en": "All domains (no grouping)"},
+    "kpi.compliance": {"pl": "Zgodność", "en": "Compliance"},
+    "kpi.bounces": {"pl": "Odbicia", "en": "Bounces"},
+    "metric.spf_near_limit": {"pl": "Blisko limitu SPF", "en": "Near SPF limit"},
+
+    "settings.folders_title": {"pl": "Foldery", "en": "Folders"},
+    "settings.folders_hint": {
+        "pl": "PROTOTYP — domena może być w kilku folderach naraz. Przypisanie ustawia się przy edycji domeny.",
+        "en": "PROTOTYPE — a domain can be in several folders at once. Assign it while editing the domain.",
+    },
+    "field.folder_name": {"pl": "Nazwa folderu", "en": "Folder name"},
+    "field.domain_folders": {"pl": "Foldery", "en": "Folders"},
+    "confirm.delete_folder": {
+        "pl": "Usunąć ten folder? Domeny zostaną, tylko przestaną być w nim widoczne.",
+        "en": "Delete this folder? Domains stay — they just stop showing up in it.",
+    },
+
+    "settings.bulk_import_title": {"pl": "Import zbiorczy (XLSX)", "en": "Bulk import (XLSX)"},
+    "settings.bulk_import_hint": {
+        "pl": "PROTOTYP — dodaj wiele domen i skrzynek naraz z pliku XLSX zamiast pojedynczo.",
+        "en": "PROTOTYPE — add many domains and mailboxes at once from an XLSX file instead of one by one.",
+    },
+    "btn.download_template": {"pl": "Pobierz szablon XLSX", "en": "Download XLSX template"},
+    "btn.upload_import": {"pl": "Wgraj i zaimportuj", "en": "Upload and import"},
+    "bulk_import.results_title": {"pl": "Wynik importu", "en": "Import results"},
+    "bulk_import.row": {"pl": "Wiersz", "en": "Row"},
+    "bulk_import.status.created": {"pl": "dodano", "en": "created"},
+    "bulk_import.status.skipped": {"pl": "pominięto", "en": "skipped"},
+    "bulk_import.status.error": {"pl": "błąd", "en": "error"},
+    "bulk_import.summary": {
+        "pl": "{created} dodanych, {skipped} pominiętych, {errors} błędów.",
+        "en": "{created} created, {skipped} skipped, {errors} errors.",
+    },
     "error.domain_exists": {
         "pl": "Ta domena jest już na liście.",
         "en": "That domain is already on the list.",

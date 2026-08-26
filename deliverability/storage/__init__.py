@@ -14,6 +14,7 @@ from .repositories import (
     DmarcRepository,
     DnsRepository,
     DomainConfigRepository,
+    FolderRepository,
     IngestionRunRepository,
     MailboxConfigRepository,
 )
@@ -29,4 +30,5 @@ __all__ = [
     "DomainConfigRepository",
     "MailboxConfigRepository",
     "DismissedFlagRepository",
+    "FolderRepository",
 ]

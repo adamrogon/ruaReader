@@ -15,7 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,11 +29,13 @@ from ..secrets import SecretsError
 from ..secrets import encrypt as encrypt_secret
 from ..secrets import is_configured as secret_key_configured
 from ..storage import (
+    BlacklistRepository,
     BounceRepository,
     DismissedFlagRepository,
     DmarcRepository,
     DnsRepository,
     DomainConfigRepository,
+    FolderRepository,
     MailboxConfigRepository,
     get_database,
 )
@@ -252,16 +254,23 @@ def _date_axis(days: int) -> List[str]:
     return [(today - dt.timedelta(days=offset)).isoformat() for offset in range(days - 1, -1, -1)]
 
 
-@app.get("/")
-def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)):
-    lang = _resolve_request_lang(request)
+def _overview_context(
+    request: Request, days: int, lang: str, domains: Optional[List[Any]] = None
+) -> Dict[str, Any]:
+    """Shared by "/" (every domain) and "/folder/{id}" (one folder's domains)
+    — the only difference is which domains get passed to domain_statuses().
+    """
     ctx = _context()
-    raw_statuses = domain_statuses(ctx["settings"], ctx["database"], window_days=days)
+    raw_statuses = domain_statuses(ctx["settings"], ctx["database"], domains=domains, window_days=days)
     # Resolved to the active language once here; nothing downstream needs to
     # know a second language exists.
     statuses = [s.localize(lang) for s in raw_statuses]
     health = localize_ingestion_health(ingestion_health(ctx["database"], ctx["settings"]), lang)
 
+    passed_total = sum(s["metrics"].get("passed", 0) or 0 for s in statuses)
+    evaluated_total = sum(
+        (s["metrics"].get("passed", 0) or 0) + (s["metrics"].get("failed", 0) or 0) for s in statuses
+    )
     totals = {
         "domains": len(statuses),
         "critical": sum(1 for s in statuses if s["severity"] == "critical"),
@@ -270,6 +279,13 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
         "sender_blocks": sum(s["metrics"].get("bounces_sender_block", 0) for s in statuses),
         "blacklisted": sum(1 for s in statuses if s["metrics"].get("critical_blacklist")),
         "messages": sum(s["metrics"].get("messages", 0) for s in statuses),
+        "compliance": (passed_total / evaluated_total) if evaluated_total else None,
+        "bounces_total": sum(s["metrics"].get("bounces_total", 0) for s in statuses),
+        "spf_near_limit": sum(
+            1
+            for s in statuses
+            if s["metrics"].get("spf_lookups") is not None and s["metrics"]["spf_lookups"] >= 8
+        ),
     }
 
     # Fleet-wide per-ESP totals — the "is it Google or Yahoo" question asked
@@ -304,24 +320,135 @@ def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=9
         )
     esp_summary.sort(key=lambda e: (ESP_DISPLAY_ORDER.get(e["esp"], 50), -e["total"]))
 
+    domain_filter = [d.name for d in domains] if domains is not None else None
     other_providers = DmarcRepository(ctx["database"], ctx["settings"].project_id).other_esp_org_breakdown(
-        _since(days)
+        _since(days), domain_filter
     )
 
-    return _render(
-        request,
-        "overview.html",
-        lang,
-        {
-            "statuses": statuses,
-            "health": health,
-            "totals": totals,
-            "esp_summary": esp_summary,
-            "other_providers": other_providers,
-            "days": days,
-            "staleness_hours": STALENESS_HOURS,
-        },
-    )
+    return {
+        "statuses": statuses,
+        "health": health,
+        "totals": totals,
+        "esp_summary": esp_summary,
+        "other_providers": other_providers,
+        "days": days,
+        "staleness_hours": STALENESS_HOURS,
+    }
+
+
+@app.get("/")
+def overview(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)):
+    """Prototype: home is folder tiles, not a flat list of every domain — a
+    department opens their own folder instead of scrolling past everyone
+    else's. "Wszystkie domeny" is one tile among these, not the default.
+    """
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    folder_repo = FolderRepository(ctx["database"], ctx["settings"].project_id)
+    domain_repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+
+    # Fleet-wide totals + trend charts, shared with "/domains" and
+    # "/folder/{id}" — the home page shows the same numbers, just rolled up
+    # across every folder instead of one.
+    fleet = _overview_context(request, days, lang)
+    status_by_domain = {s["domain"]: s for s in fleet["statuses"]}
+
+    all_folders = folder_repo.list_all()
+    counts = folder_repo.domain_counts()
+    all_domains_by_id = {d["id"]: d for d in domain_repo.list_all()}
+
+    rows = []
+    for folder in all_folders:
+        domain_ids = folder_repo.domain_ids_in_folder(folder["id"])
+        names = {all_domains_by_id[did]["name"] for did in domain_ids if did in all_domains_by_id}
+        folder_statuses = [status_by_domain[n] for n in names if n in status_by_domain]
+        messages = sum(s["metrics"].get("messages", 0) for s in folder_statuses)
+        passed = sum(s["metrics"].get("passed", 0) or 0 for s in folder_statuses)
+        evaluated_total = sum(
+            (s["metrics"].get("passed", 0) or 0) + (s["metrics"].get("failed", 0) or 0) for s in folder_statuses
+        )
+        # SPF lookups aren't additive across domains (each is its own count
+        # against the same fixed limit of 10) — the meaningful fleet-level
+        # rollup is how many domains are close to or over that limit, same
+        # shape as the critical/warning domain counts below.
+        spf_near_limit = sum(
+            1
+            for s in folder_statuses
+            if s["metrics"].get("spf_lookups") is not None
+            and s["metrics"]["spf_lookups"] >= 8
+        )
+        rows.append(
+            {
+                "id": folder["id"],
+                "name": folder["name"],
+                "domain_count": counts.get(folder["id"], 0),
+                "messages": messages,
+                "compliance": (passed / evaluated_total) if evaluated_total else None,
+                "bounces_total": sum(s["metrics"].get("bounces_total", 0) for s in folder_statuses),
+                "spf_near_limit": spf_near_limit,
+                "critical": sum(1 for s in folder_statuses if s["severity"] == "critical"),
+                "warning": sum(1 for s in folder_statuses if s["severity"] == "warning"),
+                "ok": sum(1 for s in folder_statuses if s["severity"] in ("ok", "info")),
+            }
+        )
+
+    context = dict(fleet)
+    context["rows"] = rows
+    return _render(request, "folders.html", lang, context)
+
+
+@app.get("/domains")
+def all_domains(request: Request, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)):
+    """The old "/" — every domain, flat, no folder grouping. Reached from the
+    "Wszystkie domeny" tile on the new home page, not from the sidebar.
+    """
+    lang = _resolve_request_lang(request)
+    return _render(request, "overview.html", lang, _overview_context(request, days, lang))
+
+
+@app.get("/folder/{folder_id}")
+def folder_detail(request: Request, folder_id: int, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    folder_repo = FolderRepository(ctx["database"], ctx["settings"].project_id)
+    domain_repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
+
+    folder = folder_repo.get(folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail=f"Folder {folder_id} not found")
+
+    domain_ids = set(folder_repo.domain_ids_in_folder(folder_id))
+    names = {row["name"] for row in domain_repo.list_all() if row["id"] in domain_ids}
+    scoped_domains = [d for d in load_domains() if d.name in names]
+
+    context = _overview_context(request, days, lang, domains=scoped_domains)
+    context["folder"] = folder
+    return _render(request, "overview.html", lang, context)
+
+
+@app.post("/settings/folders")
+def create_folder(request: Request, name: str = Form(...)):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    if name.strip():
+        FolderRepository(ctx["database"], ctx["settings"].project_id).create(name)
+    return _settings_redirect(lang, notice="folder_saved")
+
+
+@app.post("/settings/folders/{folder_id}/delete")
+def delete_folder(request: Request, folder_id: int):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    FolderRepository(ctx["database"], ctx["settings"].project_id).delete(folder_id)
+    return _settings_redirect(lang, notice="folder_deleted")
+
+
+@app.post("/settings/domains/{domain_id}/folders")
+def set_domain_folders(request: Request, domain_id: int, folder_ids: List[int] = Form(default=[])):
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    FolderRepository(ctx["database"], ctx["settings"].project_id).set_domain_folders(domain_id, folder_ids)
+    return _settings_redirect(lang, notice="domain_folders_saved")
 
 
 @app.get("/domain/{domain}")
@@ -350,6 +477,15 @@ def domain_detail(
     dns_row = DnsRepository(database, settings.project_id).latest_per_domain().get(domain)
     bounce_repo = BounceRepository(database, settings.project_id)
     since = _since(days)
+
+    # Full IP list for the blacklist section — the flag message up top only
+    # names the first 3 IPs (see health.py), this is the untruncated source
+    # of truth for actually filing delisting requests. Listed IPs first, same
+    # "most urgent first" convention as everywhere else in this app.
+    blacklist_rows = sorted(
+        BlacklistRepository(database, settings.project_id).latest_per_domain().get(domain, []),
+        key=lambda r: (not r["listed"], r["ip"]),
+    )
 
     # Consolidated "what's actually happening" table — folds the old separate
     # "sender blocks" and "bounce codes" panels into one row-per-signature
@@ -395,6 +531,7 @@ def domain_detail(
             "status": status,
             "domain": domain,
             "dns": dns_row,
+            "blacklist_rows": blacklist_rows,
             "bounce_summary": bounce_summary,
             "recent_bounces": recent_bounces,
             "bounce_pagination": {
@@ -680,19 +817,22 @@ def _selectors_from_form(raw: str) -> List[str]:
     return [s.strip() for s in (raw or "").replace("\n", ",").split(",") if s.strip()]
 
 
-@app.get("/settings")
-def settings_page(request: Request, notice: Optional[str] = None, error: Optional[str] = None):
-    lang = _resolve_request_lang(request)
+def _settings_context(
+    notice: Optional[str] = None, error: Optional[str] = None, bulk_results: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     ctx = _context()
     settings, database = ctx["settings"], ctx["database"]
 
     domain_repo = DomainConfigRepository(database, settings.project_id)
     mailbox_repo = MailboxConfigRepository(database, settings.project_id)
     dmarc_repo = DmarcRepository(database, settings.project_id)
+    folder_repo = FolderRepository(database, settings.project_id)
 
     mailboxes = mailbox_repo.list_all()
     domains = domain_repo.list_all()
     monitored_names = {d["name"] for d in domains}
+    all_folders = folder_repo.list_all()
+    folder_ids_by_domain = {d["id"]: folder_repo.folder_ids_for_domain(d["id"]) for d in domains}
 
     # For the bounce mailbox dropdown: the current list of choices, plus any
     # value stored on an existing bounce mailbox that is no longer on the
@@ -703,23 +843,32 @@ def settings_page(request: Request, notice: Optional[str] = None, error: Optiona
         {m["domain"] for m in bounce_mailboxes if m["domain"] and m["domain"] not in monitored_names}
     )
 
+    return {
+        "domains": domains,
+        "monitored_names": sorted(monitored_names),
+        "orphan_bounce_domains": orphan_bounce_domains,
+        "all_folders": all_folders,
+        "folder_ids_by_domain": folder_ids_by_domain,
+        "rua_mailboxes": [m for m in mailboxes if m["kind"] == "rua"],
+        "bounce_mailboxes": bounce_mailboxes,
+        "unknown_report_domains": dmarc_repo.unknown_report_domains(),
+        "secret_key_ok": secret_key_configured(),
+        "notice": notice,
+        "error": error,
+        "days": DEFAULT_WINDOW_DAYS,
+        "page": "settings",
+        "bulk_results": bulk_results,
+    }
+
+
+@app.get("/settings")
+def settings_page(request: Request, notice: Optional[str] = None, error: Optional[str] = None):
+    lang = _resolve_request_lang(request)
     return _render(
         request,
         "settings.html",
         lang,
-        {
-            "domains": domains,
-            "monitored_names": sorted(monitored_names),
-            "orphan_bounce_domains": orphan_bounce_domains,
-            "rua_mailboxes": [m for m in mailboxes if m["kind"] == "rua"],
-            "bounce_mailboxes": bounce_mailboxes,
-            "unknown_report_domains": dmarc_repo.unknown_report_domains(),
-            "secret_key_ok": secret_key_configured(),
-            "notice": notice,
-            "error": error,
-            "days": DEFAULT_WINDOW_DAYS,
-            "page": "settings",
-        },
+        _settings_context(notice, error),
     )
 
 
@@ -731,6 +880,184 @@ def _settings_redirect(lang: str, notice: Optional[str] = None, error: Optional[
         params.append(f"error={error}")
     # 303 so the browser re-issues as GET and a refresh does not resubmit.
     return RedirectResponse(f"/settings?{'&'.join(params)}", status_code=303)
+
+
+# --- Bulk import (prototype) -------------------------------------------------
+# One row = one domain + its bounce mailbox + (optionally) its rua mailbox.
+# Reuses DomainConfigRepository.create() / MailboxConfigRepository.create()
+# in a loop rather than any new write path — see the spec doc for why.
+
+_BULK_IMPORT_HEADERS = [
+    "domain", "dkim_selectors", "notes",
+    "imap_host", "imap_port", "imap_ssl", "imap_username", "imap_password", "imap_folder",
+    "same_mailbox_for_rua_and_bounce",
+    "rua_imap_host", "rua_imap_port", "rua_imap_ssl", "rua_imap_username", "rua_imap_password", "rua_imap_folder",
+    "folders",
+]
+
+
+def _truthy_yes(value: Any, default: bool = True) -> bool:
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value).strip().lower() not in ("no", "false", "0", "nie")
+
+
+@app.get("/settings/bulk-import/template")
+def bulk_import_template() -> Response:
+    """Generated on the fly (not a static file) so the columns can never
+    drift out of sync with what bulk_import() below actually parses.
+    """
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Import"
+    ws.append(_BULK_IMPORT_HEADERS)
+    ws.append(
+        [
+            "example.com", "google", "Google Workspace",
+            "imap.gmail.com", 993, "yes", "outreach@example.com", "haslo-aplikacji-tutaj", "INBOX",
+            "yes",
+            "", "", "", "", "", "",
+            "Media",
+        ]
+    )
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    ws.column_dimensions[get_column_letter(_BULK_IMPORT_HEADERS.index("same_mailbox_for_rua_and_bounce") + 1)].width = 30
+    ws["J1"].comment = Comment(
+        "yes = ta sama skrzynka odbiera raporty DMARC i odbicia (typowy przypadek).\n"
+        "no = wypełnij też kolumny rua_imap_* osobno.",
+        "Deliverability Monitor",
+    )
+    ws["H1"].comment = Comment("Hasło aplikacji w postaci jawnej — usuń plik z dysku po imporcie.", "Deliverability Monitor")
+    for i, header in enumerate(_BULK_IMPORT_HEADERS, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = max(16, len(header) + 2)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="szablon-import-domen.xlsx"'},
+    )
+
+
+@app.post("/settings/bulk-import")
+async def bulk_import(request: Request, file: UploadFile = File(...)) -> Response:
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    database, settings = ctx["database"], ctx["settings"]
+    domain_repo = DomainConfigRepository(database, settings.project_id)
+    mailbox_repo = MailboxConfigRepository(database, settings.project_id)
+    folder_repo = FolderRepository(database, settings.project_id)
+
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    # Read fully into memory and never touch disk — the file contains
+    # plaintext IMAP passwords (see the spec doc's security section).
+    raw = await file.read()
+    try:
+        wb = load_workbook(BytesIO(raw), data_only=True)
+    except Exception:
+        return _render(
+            request, "settings.html", lang,
+            _settings_context(error="required", bulk_results=[{"row": "-", "domain": "-", "status": "error", "reason": "Nie udało się odczytać pliku XLSX."}]),
+        )
+    ws = wb.active
+    header_row = [str(c.value).strip() if c.value else "" for c in ws[1]]
+
+    existing_mailbox_names = {m["name"] for m in mailbox_repo.list_all()}
+    monitored_names = {d["name"] for d in domain_repo.list_all()}
+    results: List[Dict[str, Any]] = []
+
+    for row_num, raw_row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        row = dict(zip(header_row, raw_row))
+        domain_name = str(row.get("domain") or "").strip().lower()
+        if not domain_name:
+            continue  # a fully blank row (e.g. trailing empty rows) is not an error, just skipped silently
+
+        def _fail(reason: str) -> None:
+            results.append({"row": row_num, "domain": domain_name, "status": "error", "reason": reason})
+
+        try:
+            if domain_name in monitored_names:
+                results.append({"row": row_num, "domain": domain_name, "status": "skipped", "reason": "domena już monitorowana"})
+                continue
+
+            host = str(row.get("imap_host") or "").strip()
+            username = str(row.get("imap_username") or "").strip()
+            password = str(row.get("imap_password") or "").strip()
+            if not host or not username or not password:
+                _fail("brak imap_host / imap_username / imap_password")
+                continue
+
+            bounce_name = f"{domain_name}-bounce"
+            rua_name = f"{domain_name}-rua"
+            if bounce_name in existing_mailbox_names or rua_name in existing_mailbox_names:
+                _fail("nazwa skrzynki już istnieje")
+                continue
+
+            same_mailbox = _truthy_yes(row.get("same_mailbox_for_rua_and_bounce"))
+            if same_mailbox:
+                rua_host, rua_user, rua_pass = host, username, password
+                rua_port = int(row.get("imap_port") or 993)
+                rua_ssl = _truthy_yes(row.get("imap_ssl"))
+                rua_folder = str(row.get("imap_folder") or "INBOX").strip()
+            else:
+                rua_host = str(row.get("rua_imap_host") or "").strip()
+                rua_user = str(row.get("rua_imap_username") or "").strip()
+                rua_pass = str(row.get("rua_imap_password") or "").strip()
+                rua_port = int(row.get("rua_imap_port") or 993)
+                rua_ssl = _truthy_yes(row.get("rua_imap_ssl"))
+                rua_folder = str(row.get("rua_imap_folder") or "INBOX").strip()
+                if not rua_host or not rua_user or not rua_pass:
+                    _fail("same_mailbox_for_rua_and_bounce=no, ale brak danych rua_imap_*")
+                    continue
+
+            selectors = _selectors_from_form(str(row.get("dkim_selectors") or ""))
+            notes = str(row.get("notes") or "").strip()
+
+            domain_id = domain_repo.create(name=domain_name, dkim_selectors=selectors, notes=notes, enabled=True)
+
+            mailbox_repo.create(
+                name=bounce_name, kind="bounce",
+                host=host, port=int(row.get("imap_port") or 993), ssl=_truthy_yes(row.get("imap_ssl")),
+                username=username, folder=str(row.get("imap_folder") or "INBOX").strip(),
+                processed_folder=None, domain=domain_name, enabled=True,
+                password_encrypted=encrypt_secret(password),
+            )
+            existing_mailbox_names.add(bounce_name)
+
+            mailbox_repo.create(
+                name=rua_name, kind="rua",
+                host=rua_host, port=rua_port, ssl=rua_ssl,
+                username=rua_user, folder=rua_folder,
+                processed_folder=None, domain=None, enabled=True,
+                password_encrypted=encrypt_secret(rua_pass),
+            )
+            existing_mailbox_names.add(rua_name)
+
+            folder_names = [f.strip() for f in str(row.get("folders") or "").split(",") if f.strip()]
+            if folder_names:
+                folder_ids = [folder_repo.get_or_create_by_name(fn) for fn in folder_names]
+                folder_repo.set_domain_folders(domain_id, folder_ids)
+
+            monitored_names.add(domain_name)
+            results.append({"row": row_num, "domain": domain_name, "status": "created", "reason": ""})
+        except SecretsError:
+            _fail("SECRET_KEY nie jest ustawiony — nie można zaszyfrować hasła")
+        except Exception as exc:  # noqa: BLE001 — one bad row must not kill the rest of the import
+            _fail(f"nieoczekiwany błąd: {exc}")
+
+    return _render(request, "settings.html", lang, _settings_context(notice="bulk_import_done", bulk_results=results))
 
 
 @app.post("/settings/domains")

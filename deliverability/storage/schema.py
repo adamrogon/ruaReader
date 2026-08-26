@@ -289,6 +289,31 @@ dismissed_flags = Table(
 )
 
 
+# Prototype: organisational grouping of domains ("Media", "Sales"...), separate
+# from a mailbox's IMAP folder (mailboxes.folder above — same English word,
+# unrelated concept). A domain can belong to several folders at once, hence a
+# join table rather than a folder_id column on domains.
+folders = Table(
+    "folders",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("name", String(255), nullable=False),
+    Column("created_at", DateTime, nullable=False),
+    UniqueConstraint("project_id", "name", name="uq_folder_name"),
+)
+
+domain_folders = Table(
+    "domain_folders",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("domain_id", Integer, ForeignKey("domains.id"), nullable=False),
+    Column("folder_id", Integer, ForeignKey("folders.id"), nullable=False),
+    UniqueConstraint("project_id", "domain_id", "folder_id", name="uq_domain_folder"),
+)
+
+
 ALL_TABLES = (
     dmarc_reports,
     dmarc_records,
@@ -299,4 +324,6 @@ ALL_TABLES = (
     domains,
     mailboxes,
     dismissed_flags,
+    folders,
+    domain_folders,
 )
