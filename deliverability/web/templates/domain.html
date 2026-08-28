@@ -15,11 +15,22 @@
     </h1>
     <p>{{ status.headline }}{% if notes %} · {{ notes }}{% endif %}</p>
   </div>
-  <div class="range-picker">
-    {% for option in [1, 7, 14, 30] %}
-      <a href="/domain/{{ domain }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
-    {% endfor %}
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
+    <div class="run-now">
+      <button type="button" class="btn" id="ai-analyze">🤖 {{ t('action.ai_analyze') }}</button>
+      <span class="run-msg" id="ai-msg"></span>
+    </div>
+    <div class="range-picker">
+      {% for option in [1, 7, 14, 30] %}
+        <a href="/domain/{{ domain }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+      {% endfor %}
+    </div>
   </div>
+</div>
+
+<div class="card" id="ai-summary-card" style="display:none; margin-bottom:16px">
+  <div class="card-title">{{ t('ai_analyze.title') }}</div>
+  <div id="ai-summary-text" style="font-size:14px; line-height:1.5; margin-top:6px"></div>
 </div>
 
 <div class="kpi-panel">
@@ -451,6 +462,36 @@ const L = {
   spfFail: {{ t('table.spf_fail') | tojson }},
   dkimFail: {{ t('table.dkim_fail') | tojson }},
 };
+
+// "Analizuj z AI": the summary is grounded entirely in facts computed
+// server-side (deliverability/insights.py) — this button just triggers that
+// and renders whatever text comes back, it does no reasoning of its own.
+(function () {
+  const btn = document.getElementById('ai-analyze');
+  const msg = document.getElementById('ai-msg');
+  const card = document.getElementById('ai-summary-card');
+  const text = document.getElementById('ai-summary-text');
+  if (!btn) return;
+  const T_RUNNING = {{ t('action.running') | tojson }};
+  const T_ERROR = {{ t('ai_analyze.error') | tojson }};
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    msg.innerHTML = '<span class="spin"></span> ' + T_RUNNING;
+    card.style.display = 'none';
+    try {
+      const res = await fetch(`/api/domain/${encodeURIComponent(DOMAIN)}/analyze?days=${DAYS}&lang=${LANG}`, { method: 'POST' });
+      const data = await res.json();
+      text.textContent = data.summary || T_ERROR;
+      card.style.display = 'block';
+      msg.textContent = '';
+    } catch (err) {
+      msg.textContent = T_ERROR;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
 
 // Clicking any point/bar drills into that exact day — which reporting org,
 // which source, and exactly what failed. Works for both the stacked bars and

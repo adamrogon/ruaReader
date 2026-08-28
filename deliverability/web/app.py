@@ -24,6 +24,7 @@ from .. import jobs
 from ..classify.esp import ESP_DISPLAY_ORDER
 from ..config import Mailbox, Settings, load_domains
 from ..health import STALENESS_HOURS, domain_statuses, ingestion_health, localize_ingestion_health
+from ..insights import summarize_domain
 from ..i18n import DEFAULT_LANG, SUPPORTED_LANGS, resolve_lang, translate
 from ..secrets import SecretsError
 from ..secrets import encrypt as encrypt_secret
@@ -802,6 +803,19 @@ def api_esp(domain: Optional[str] = None, days: int = Query(7, ge=1, le=90)) -> 
             "forwarded": [vals["forwarded"] for _, vals in ordered],
         }
     )
+
+
+@app.post("/api/domain/{domain}/analyze")
+def api_domain_analyze(
+    request: Request, domain: str, days: int = Query(DEFAULT_WINDOW_DAYS, ge=1, le=90)
+) -> JSONResponse:
+    """"Analizuj z AI" — see deliverability/insights.py for how this stays
+    grounded (the model only ever sees facts this route's own code already
+    computed and verified, never raw data)."""
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    result = summarize_domain(ctx["settings"], ctx["database"], domain, days, lang)
+    return JSONResponse(result)
 
 
 # --- Settings -----------------------------------------------------------------

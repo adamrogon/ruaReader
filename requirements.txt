@@ -21,6 +21,11 @@ Jinja2==3.1.6
 python-multipart==0.0.20   # form handling for the Settings screen
 openpyxl==3.1.5            # bulk-import XLSX template + parsing
 
+# "Analizuj z AI" domain-page summary (deliverability/insights.py) —
+# needs ANTHROPIC_API_KEY in .env; the feature degrades to an error message
+# in the UI if it's unset, nothing else in the app depends on this package.
+anthropic==0.125.0
+
 # cryptography arrives via parsedmarc and is used directly to encrypt mailbox
 # passwords (deliverability/secrets.py); pinned here so that stays deliberate.
 cryptography>=42,<51

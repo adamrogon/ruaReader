@@ -969,6 +969,12 @@ MESSAGES: dict = {
     "action.refresh": {"pl": "Sprawdź teraz", "en": "Check now"},
     "action.refresh_all": {"pl": "Sprawdź wszystko", "en": "Check everything"},
     "action.running": {"pl": "W trakcie…", "en": "Running…"},
+    "action.ai_analyze": {"pl": "Analizuj z AI", "en": "Analyze with AI"},
+    "ai_analyze.title": {"pl": "Podsumowanie AI", "en": "AI summary"},
+    "ai_analyze.error": {
+        "pl": "Nie udało się wygenerować podsumowania. Spróbuj ponownie.",
+        "en": "Could not generate the summary. Try again.",
+    },
     "action.started": {"pl": "Uruchomiono sprawdzanie ({stream}).", "en": "Started {stream} check."},
     "action.already_running": {
         "pl": "Sprawdzanie {stream} już trwa.",

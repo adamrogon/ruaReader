@@ -819,6 +819,28 @@ class BlacklistRepository(_BaseRepository):
                 grouped.setdefault(row["domain"], []).append(row)
         return grouped
 
+    def history_for_domain(self, domain: str, since: dt.datetime) -> List[Dict[str, Any]]:
+        """Every check round for one domain since a cutoff.
+
+        Unlike ``latest_per_domain`` (just the newest round), this is used to
+        tell "listed in every check this week" apart from "flagged once and
+        cleared" — the same IP being listed round after round is a much
+        stronger signal than a single hit.
+        """
+        stmt = (
+            select(blacklist_checks)
+            .where(
+                and_(
+                    blacklist_checks.c.project_id == self.project_id,
+                    blacklist_checks.c.domain == domain,
+                    blacklist_checks.c.checked_at >= since,
+                )
+            )
+            .order_by(blacklist_checks.c.checked_at)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
 
 # --- Ingestion health ---------------------------------------------------------
 
