@@ -157,17 +157,40 @@ def _blacklist_persistence_facts(rows: List[Dict[str, Any]], lang: str) -> List[
 
     facts: List[str] = []
     for ip, ip_rows in by_ip.items():
-        listed_rounds = sum(1 for r in ip_rows if r["listed"])
-        if listed_rounds == total_rounds and listed_rounds >= 2:
-            lists = sorted({name for r in ip_rows if r["listed"] for name in (r.get("listed_by") or [])})
-            lists_text = ", ".join(lists) if lists else ("nieznana lista" if lang == "pl" else "unknown list")
+        # Count how many rounds *each specific list* actually flagged this
+        # IP — not "any list, in any listed round". Bundling those together
+        # was the bug: a list that hit once got reported as if it applied to
+        # every round just because a *different* list genuinely did.
+        rounds_per_list: Dict[str, int] = {}
+        for r in ip_rows:
+            if not r["listed"]:
+                continue
+            for name in r.get("listed_by") or []:
+                rounds_per_list[name] = rounds_per_list.get(name, 0) + 1
+
+        persistent = sorted(name for name, count in rounds_per_list.items() if count == total_rounds)
+        one_off = sorted(name for name, count in rounds_per_list.items() if 0 < count < total_rounds)
+
+        if persistent:
+            lists_text = ", ".join(persistent)
+            if lang == "pl":
+                facts.append(f"IP {ip} jest zablokowane w każdym z ostatnich {total_rounds} sprawdzeń ({lists_text}).")
+            else:
+                facts.append(f"IP {ip} has been listed in every one of the last {total_rounds} checks ({lists_text}).")
+
+        # Worth surfacing but explicitly NOT as "persistent" — a one-off hit
+        # reads very differently from a standing block.
+        for name in one_off:
+            count = rounds_per_list[name]
             if lang == "pl":
                 facts.append(
-                    f"IP {ip} jest zablokowane w każdym z ostatnich {total_rounds} sprawdzeń ({lists_text})."
+                    f"IP {ip} pojawił się na liście {name} tylko w {count} z ostatnich {total_rounds} "
+                    f"sprawdzeń — to nie jest konsekwentne zablokowanie, raczej pojedynczy incydent."
                 )
             else:
                 facts.append(
-                    f"IP {ip} has been listed in every one of the last {total_rounds} checks ({lists_text})."
+                    f"IP {ip} showed up on {name} in only {count} of the last {total_rounds} checks — "
+                    f"not a standing block, more like a one-off incident."
                 )
     return facts
 
