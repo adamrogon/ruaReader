@@ -11,7 +11,7 @@ import email
 import logging
 from contextlib import contextmanager
 from email.message import Message
-from typing import Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from imapclient import IMAPClient
 
@@ -33,6 +33,37 @@ def open_mailbox(mailbox: Mailbox) -> Iterator[IMAPClient]:
             client.logout()
         except Exception:  # noqa: BLE001 — logout failures must not mask real errors
             logger.debug("IMAP logout failed for %s", mailbox.name, exc_info=True)
+
+
+def _fetch_batch_with_fallback(client: IMAPClient, uids: List[int]) -> Dict[int, Dict[bytes, Any]]:
+    """Fetch a batch of UIDs, recovering from a transient server error.
+
+    A batch FETCH fails as a whole even when only one message in it is the
+    actual problem (e.g. Gmail's occasional "System Error (Failure)" on a
+    single oversized/odd message) — the other 49 shouldn't be lost over it.
+    One immediate retry clears most transient hiccups; if it doesn't, fall
+    back to fetching one UID at a time so only the genuinely bad message is
+    skipped (and logged), not the whole batch.
+    """
+    try:
+        return client.fetch(uids, ["RFC822"])
+    except Exception:  # noqa: BLE001
+        logger.warning("Batch fetch failed for %d message(s), retrying once", len(uids), exc_info=True)
+
+    try:
+        return client.fetch(uids, ["RFC822"])
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Batch fetch still failing after retry — falling back to one message at a time", exc_info=True
+        )
+
+    response: Dict[int, Dict[bytes, Any]] = {}
+    for uid in uids:
+        try:
+            response.update(client.fetch([uid], ["RFC822"]))
+        except Exception:  # noqa: BLE001
+            logger.warning("Skipping message %s — server would not fetch it", uid, exc_info=True)
+    return response
 
 
 def fetch_messages(
@@ -65,7 +96,7 @@ def fetch_messages(
     # response.
     for start in range(0, len(uids), 50):
         batch = uids[start : start + 50]
-        response = client.fetch(batch, ["RFC822"])
+        response = _fetch_batch_with_fallback(client, batch)
         for uid, data in response.items():
             raw = data.get(b"RFC822")
             if not raw:
