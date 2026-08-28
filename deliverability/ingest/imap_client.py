@@ -86,6 +86,25 @@ def move_to_folder(client: IMAPClient, uid: int, folder: str) -> None:
         logger.warning("Could not move message %s to %s", uid, folder, exc_info=True)
 
 
+def find_junk_folder(client: IMAPClient) -> Optional[str]:
+    """Find the mailbox's Spam/Junk folder, if any.
+
+    Uses the IMAP SPECIAL-USE flag (``\\Junk``, RFC 6154) rather than a
+    hardcoded name — Gmail localises "[Gmail]/Spam" to the account's own
+    language (French, German, etc. all differ), so guessing a name would
+    silently miss it for some accounts. Best-effort: a server that doesn't
+    support SPECIAL-USE, or a transient LIST failure, just means no junk
+    folder is checked this run — never worth aborting ingestion over.
+    """
+    try:
+        for flags, _delimiter, name in client.list_folders():
+            if b"\\Junk" in flags:
+                return name
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not list folders to find Junk", exc_info=True)
+    return None
+
+
 def iter_attachments(message: Message) -> Iterator[Tuple[str, bytes]]:
     """Yield ``(filename, payload)`` for every attachment-like part."""
     for part in message.walk():

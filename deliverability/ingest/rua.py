@@ -27,7 +27,7 @@ from ..classify.esp import esp_from_org_name, esp_from_source
 from ..classify.forwarding import classify_evaluation
 from ..config import Mailbox, Settings, load_rua_mailboxes
 from ..storage import Database, DmarcRepository, IngestionRunRepository, get_database
-from .imap_client import fetch_messages, iter_attachments, move_to_folder, open_mailbox
+from .imap_client import fetch_messages, find_junk_folder, iter_attachments, move_to_folder, open_mailbox
 
 logger = logging.getLogger(__name__)
 
@@ -206,70 +206,81 @@ def ingest_mailbox(
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=since_days)).date()
 
     with open_mailbox(mailbox) as client:
-        messages = fetch_messages(client, since=since)
-        stats["messages"] = len(messages)
+        folders = [mailbox.folder]
+        # A report the provider auto-filed as spam is otherwise invisible to
+        # this tool — no error, the message count is just silently short.
+        # Found via the SPECIAL-USE flag rather than a hardcoded name (see
+        # find_junk_folder's docstring for why a hardcoded name isn't safe).
+        junk_folder = find_junk_folder(client)
+        if junk_folder and junk_folder != mailbox.folder:
+            folders.append(junk_folder)
 
-        for uid, message in messages:
-            stored_any = False
-            for filename, payload in iter_attachments(message):
-                for xml in extract_xml_documents(filename, payload):
-                    stats["reports_found"] += 1
-                    try:
-                        # Cheap, DNS-free parse first, purely to read the
-                        # identity fields (report_id/org_name/dates) needed
-                        # for the dedup check below. Without processed_folder
-                        # configured, a mailbox gets rescanned in full on
-                        # every run, and the vast majority of reports on any
-                        # given run are ones already stored — paying for a
-                        # live reverse-DNS lookup per source IP (offline=False)
-                        # on every one of those, every time, is what made
-                        # this stream take 60-100s for just two mailboxes.
-                        # report_id/org_name/date_begin/date_end/policy_domain
-                        # come straight from report_metadata/policy_published
-                        # in the XML, not from anything DNS-derived, so this
-                        # probe is exact — not an approximation.
-                        probe = parsedmarc.parse_aggregate_report_xml(xml, offline=True)
-                        probe_row, _, _ = normalise_report(probe)
+        for folder in folders:
+            client.select_folder(folder)
+            messages = fetch_messages(client, since=since)
+            stats["messages"] += len(messages)
 
-                        if not probe_row["report_id"] or not probe_row["policy_domain"]:
-                            logger.warning("Skipping report with no id/domain in %s", mailbox.name)
-                            stats["errors"] += 1
-                            continue
+            for uid, message in messages:
+                stored_any = False
+                for filename, payload in iter_attachments(message):
+                    for xml in extract_xml_documents(filename, payload):
+                        stats["reports_found"] += 1
+                        try:
+                            # Cheap, DNS-free parse first, purely to read the
+                            # identity fields (report_id/org_name/dates) needed
+                            # for the dedup check below. Without processed_folder
+                            # configured, a mailbox gets rescanned in full on
+                            # every run, and the vast majority of reports on any
+                            # given run are ones already stored — paying for a
+                            # live reverse-DNS lookup per source IP (offline=False)
+                            # on every one of those, every time, is what made
+                            # this stream take 60-100s for just two mailboxes.
+                            # report_id/org_name/date_begin/date_end/policy_domain
+                            # come straight from report_metadata/policy_published
+                            # in the XML, not from anything DNS-derived, so this
+                            # probe is exact — not an approximation.
+                            probe = parsedmarc.parse_aggregate_report_xml(xml, offline=True)
+                            probe_row, _, _ = normalise_report(probe)
 
-                        if repository.report_exists(
-                            probe_row["report_id"],
-                            probe_row["org_name"],
-                            probe_row["date_begin"],
-                            probe_row["date_end"],
-                        ):
-                            stats["duplicates"] += 1
+                            if not probe_row["report_id"] or not probe_row["policy_domain"]:
+                                logger.warning("Skipping report with no id/domain in %s", mailbox.name)
+                                stats["errors"] += 1
+                                continue
+
+                            if repository.report_exists(
+                                probe_row["report_id"],
+                                probe_row["org_name"],
+                                probe_row["date_begin"],
+                                probe_row["date_end"],
+                            ):
+                                stats["duplicates"] += 1
+                                stored_any = True
+                                continue
+
+                            # Only genuinely new reports pay for the full,
+                            # reverse-DNS-resolving parse the forwarder
+                            # classification depends on.
+                            parsed = probe if offline else parsedmarc.parse_aggregate_report_xml(xml, offline=offline)
+                            report_row, record_rows, receiving_esp = normalise_report(parsed)
+
+                            report_row["raw_xml_path"] = archive_xml(
+                                settings,
+                                report_row["policy_domain"],
+                                report_row["org_name"],
+                                report_row["report_id"],
+                                xml,
+                            )
+                            report_row["source_mailbox"] = mailbox.name
+
+                            repository.insert_report(report_row, record_rows, receiving_esp)
+                            stats["reports_stored"] += 1
                             stored_any = True
-                            continue
+                        except Exception:  # noqa: BLE001
+                            stats["errors"] += 1
+                            logger.exception("Failed to process a report from %s", mailbox.name)
 
-                        # Only genuinely new reports pay for the full,
-                        # reverse-DNS-resolving parse the forwarder
-                        # classification depends on.
-                        parsed = probe if offline else parsedmarc.parse_aggregate_report_xml(xml, offline=offline)
-                        report_row, record_rows, receiving_esp = normalise_report(parsed)
-
-                        report_row["raw_xml_path"] = archive_xml(
-                            settings,
-                            report_row["policy_domain"],
-                            report_row["org_name"],
-                            report_row["report_id"],
-                            xml,
-                        )
-                        report_row["source_mailbox"] = mailbox.name
-
-                        repository.insert_report(report_row, record_rows, receiving_esp)
-                        stats["reports_stored"] += 1
-                        stored_any = True
-                    except Exception:  # noqa: BLE001
-                        stats["errors"] += 1
-                        logger.exception("Failed to process a report from %s", mailbox.name)
-
-            if stored_any and mailbox.processed_folder:
-                move_to_folder(client, uid, mailbox.processed_folder)
+                if stored_any and mailbox.processed_folder:
+                    move_to_folder(client, uid, mailbox.processed_folder)
 
     return stats
 
