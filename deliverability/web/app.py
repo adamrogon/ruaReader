@@ -89,6 +89,31 @@ def _bold_markers(text: str) -> "Any":
 templates.env.filters["bold_markers"] = _bold_markers
 
 
+def _markdown_to_html(text: str) -> str:
+    """Turn **bold** and blank-line-separated paragraphs into HTML.
+
+    Used for the AI summary — unlike ``_bold_markers`` this keeps every
+    paragraph (an AI summary is a handful of separate points, not one fixed
+    description+action pair), but the same safety property holds: the text
+    is HTML-escaped first, so only the literal ``**`` markers the escaper
+    leaves alone become tags. The model output is plain sentences built by
+    ``insights.py`` from pre-verified facts — this is purely a readability
+    pass, not a trust boundary.
+    """
+    import re
+
+    from markupsafe import escape
+
+    result = str(escape(text))
+    # Belt-and-suspenders: the prompt asks the model not to add its own
+    # title, but strip a stray leading "# Heading" line if one shows up
+    # anyway rather than rendering a literal "#" in the card.
+    result = re.sub(r"^#{1,6}\s*(.+)$", r"\1", result, flags=re.MULTILINE)
+    result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}", result) if p.strip()]
+    return "".join(f"<p>{p}</p>" for p in paragraphs) or f"<p>{result}</p>"
+
+
 def _static_version() -> str:
     """Modtime-based cache-buster for the stylesheet URL.
 
@@ -815,6 +840,7 @@ def api_domain_analyze(
     lang = _resolve_request_lang(request)
     ctx = _context()
     result = summarize_domain(ctx["settings"], ctx["database"], domain, days, lang)
+    result["summary_html"] = _markdown_to_html(result["summary"])
     return JSONResponse(result)
 
 

@@ -32,6 +32,34 @@ logger = logging.getLogger(__name__)
 _MIN_SPIKE_RATIO = 2.0
 _MIN_SPIKE_ABSOLUTE = 5
 
+# Hardcoded rather than relying on the OS locale (strftime("%B")) — the same
+# reason i18n.py never depends on system locale: it has to read right
+# regardless of what's installed on whatever machine runs this.
+_MONTHS_PL = [
+    "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
+    "lipca", "sierpnia", "września", "października", "listopada", "grudnia",
+]
+_MONTHS_EN = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+def _format_day(day: Any, lang: str) -> str:
+    """'2026-08-23' -> '23 sierpnia' (pl) / 'August 23' (en).
+
+    Facts read as something a person would actually write, not a DB dump —
+    and it keeps the model from having to reformat dates itself, which is
+    exactly the kind of small transformation that invites a slip.
+    """
+    try:
+        parsed = dt.date.fromisoformat(str(day)[:10])
+    except ValueError:
+        return str(day)
+    if lang == "pl":
+        return f"{parsed.day} {_MONTHS_PL[parsed.month - 1]}"
+    return f"{_MONTHS_EN[parsed.month - 1]} {parsed.day}"
+
 # Cache keyed by (domain, days, lang); avoids paying for the same summary on
 # every accidental double-click. Plain dict + lock — this app is one process,
 # one worker, so nothing fancier is needed.
@@ -62,14 +90,20 @@ def _spike_facts(rows: List[Dict[str, Any]], key: str, label_pl: str, label_en: 
         if prev_value is not None and value >= _MIN_SPIKE_ABSOLUTE and prev_value > 0:
             if value >= prev_value * _MIN_SPIKE_RATIO:
                 if lang == "pl":
-                    facts.append(f"{label_pl} skoczyło z {prev_value} do {value} wiadomości, między {prev_day} a {day}.")
+                    facts.append(
+                        f"{label_pl} skoczyło z {prev_value} do {value} wiadomości, "
+                        f"między {_format_day(prev_day, lang)} a {_format_day(day, lang)}."
+                    )
                 else:
-                    facts.append(f"{label_en} jumped from {prev_value} to {value} messages, between {prev_day} and {day}.")
+                    facts.append(
+                        f"{label_en} jumped from {prev_value} to {value} messages, "
+                        f"between {_format_day(prev_day, lang)} and {_format_day(day, lang)}."
+                    )
         elif prev_value is not None and prev_value >= _MIN_SPIKE_ABSOLUTE and value == 0:
             if lang == "pl":
-                facts.append(f"{label_pl} spadło do zera {day} (wcześniej {prev_value}).")
+                facts.append(f"{label_pl} spadło do zera {_format_day(day, lang)} (wcześniej {prev_value}).")
             else:
-                facts.append(f"{label_en} dropped to zero on {day} (was {prev_value}).")
+                facts.append(f"{label_en} dropped to zero on {_format_day(day, lang)} (was {prev_value}).")
         prev_value, prev_day = value, day
     return facts
 
@@ -97,9 +131,15 @@ def _bounce_spike_facts(rows: List[Dict[str, Any]], lang: str) -> List[str]:
             day = row["day"]
             if prev_value is not None and value >= _MIN_SPIKE_ABSOLUTE and prev_value > 0 and value >= prev_value * _MIN_SPIKE_RATIO:
                 if lang == "pl":
-                    facts.append(f"Liczba {label_pl} skoczyła z {prev_value} do {value}, między {prev_day} a {day}.")
+                    facts.append(
+                        f"Liczba {label_pl} skoczyła z {prev_value} do {value}, "
+                        f"między {_format_day(prev_day, lang)} a {_format_day(day, lang)}."
+                    )
                 else:
-                    facts.append(f"{label_en.capitalize()} jumped from {prev_value} to {value}, between {prev_day} and {day}.")
+                    facts.append(
+                        f"{label_en.capitalize()} jumped from {prev_value} to {value}, "
+                        f"between {_format_day(prev_day, lang)} and {_format_day(day, lang)}."
+                    )
             prev_value, prev_day = value, day
     return facts
 
@@ -165,24 +205,32 @@ _SYSTEM_PL = (
     "już zweryfikowanych faktów — każda liczba, data i adres IP w tej liście została policzona "
     "przez inny, deterministyczny system, nie przez Ciebie. Nie masz dostępu do żadnych innych "
     "danych o tej domenie.\n\n"
-    "Napisz zwięzłe podsumowanie (maksymalnie 4 zdania, po polsku), skupione na tym co się "
-    "zmieniło i co jest najpilniejsze. Zasady, bez wyjątków:\n"
+    "Napisz zwięzłe podsumowanie po polsku, skupione na tym co się zmieniło i co jest "
+    "najpilniejsze. Zasady, bez wyjątków:\n"
     "- Używaj WYŁĄCZNIE liczb, dat i adresów IP z podanej listy — nigdy niczego nie dopisuj ani nie zaokrąglaj inaczej niż podano.\n"
+    "- Daty w liście są już zapisane po ludzku (np. '23 sierpnia') — przepisuj je dokładnie tak, nigdy nie zamieniaj z powrotem na format RRRR-MM-DD.\n"
     "- Nie zgaduj przyczyn, których nie ma na liście.\n"
-    "- Jeśli fakty się ze sobą nie łączą w spójną historię, po prostu wymień je krótko, każdy osobno.\n"
-    "- Jeśli lista jest pusta, napisz jednym zdaniem, że nie ma nic wartego uwagi."
+    "- Formatuj dla czytelności: **pogrubiaj** (podwójne gwiazdki) najważniejsze liczby, adresy IP i nazwy dostawców; "
+    "oddzielaj różne wątki pustą linią, żeby każdy temat był osobnym, krótkim akapitem (1-2 zdania) — nie jedną ścianą tekstu.\n"
+    "- Jeśli fakty się ze sobą nie łączą w spójną historię, po prostu wymień je krótko, każdy w osobnym akapicie.\n"
+    "- Jeśli lista jest pusta, napisz jednym zdaniem, że nie ma nic wartego uwagi.\n"
+    "- Nie dodawaj własnego tytułu ani nagłówka (np. '# Podsumowanie') — pole nad Twoim tekstem już ma tytuł. Zacznij od razu od treści."
 )
 
 _SYSTEM_EN = (
     "You summarize email deliverability monitoring. You receive a list of already-verified "
     "facts — every number, date, and IP address in this list was computed by a separate, "
     "deterministic system, not by you. You have no access to any other data about this domain.\n\n"
-    "Write a concise summary (at most 4 sentences, in English), focused on what changed and "
-    "what's most urgent. Rules, no exceptions:\n"
+    "Write a concise summary in English, focused on what changed and what's most urgent. "
+    "Rules, no exceptions:\n"
     "- Use ONLY the numbers, dates, and IP addresses given in the list — never add or round anything differently than given.\n"
+    "- Dates in the list are already written naturally (e.g. 'August 23') — copy them exactly, never convert back to YYYY-MM-DD.\n"
     "- Never guess a cause that isn't in the list.\n"
-    "- If the facts don't connect into one story, just list them briefly, each on its own.\n"
-    "- If the list is empty, say in one sentence that there's nothing notable."
+    "- Format for readability: **bold** (double asterisks) the key numbers, IP addresses, and provider names; "
+    "separate distinct topics with a blank line so each is its own short paragraph (1-2 sentences), not one wall of text.\n"
+    "- If the facts don't connect into one story, just list them briefly, each in its own paragraph.\n"
+    "- If the list is empty, say in one sentence that there's nothing notable.\n"
+    "- Don't add your own title or heading (e.g. '# Summary') — the box above your text already has one. Start straight into the content."
 )
 
 
@@ -194,7 +242,7 @@ def _call_claude(facts: List[str], lang: str) -> str:
     facts_block = "\n".join(f"- {f}" for f in facts)
     response = client.messages.create(
         model="claude-opus-5",
-        max_tokens=512,
+        max_tokens=1024,
         system=system,
         output_config={"effort": "low"},
         messages=[{"role": "user", "content": facts_block}],

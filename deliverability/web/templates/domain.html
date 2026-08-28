@@ -59,17 +59,17 @@
 </div>
 
 {# --- What is wrong, in words -------------------------------------------- #}
-<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:24px">
+<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:24px; margin-bottom:18px">
   <h2 style="margin:0">{{ t('section.attention') }} {% if status.flags %}<span class="hint">{{ t('section.attention_hint') }}</span>{% endif %}</h2>
   <div class="run-now">
-    <button type="button" class="btn btn-primary" style="font-size:13.5px; padding:9px 18px" id="ai-analyze">🤖 {{ t('action.ai_analyze') }}</button>
+    <button type="button" class="btn btn-primary" style="font-size:14.5px; padding:11px 20px" id="ai-analyze">🤖 {{ t('action.ai_analyze') }}</button>
     <span class="run-msg" id="ai-msg"></span>
   </div>
 </div>
 
-<div class="card" id="ai-summary-card" style="display:none; margin:12px 0 16px">
+<div id="ai-summary-card" style="display:none; margin-bottom:18px; padding:14px 16px; border-radius:10px; background:var(--lh-orange-soft); border-left:3px solid var(--lh-orange)">
   <div class="card-title">{{ t('ai_analyze.title') }}</div>
-  <div id="ai-summary-text" style="font-size:14px; line-height:1.5; margin-top:6px"></div>
+  <div id="ai-summary-text" style="font-size:14px; line-height:1.6; margin-top:6px; color:var(--text)"></div>
 </div>
 
 {% if status.flags %}
@@ -482,7 +482,7 @@ const L = {
     try {
       const res = await fetch(`/api/domain/${encodeURIComponent(DOMAIN)}/analyze?days=${DAYS}&lang=${LANG}`, { method: 'POST' });
       const data = await res.json();
-      text.textContent = data.summary || T_ERROR;
+      text.innerHTML = data.summary_html || T_ERROR;
       card.style.display = 'block';
       msg.textContent = '';
     } catch (err) {
