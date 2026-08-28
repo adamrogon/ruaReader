@@ -15,22 +15,11 @@
     </h1>
     <p>{{ status.headline }}{% if notes %} · {{ notes }}{% endif %}</p>
   </div>
-  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap">
-    <div class="run-now">
-      <button type="button" class="btn" id="ai-analyze">🤖 {{ t('action.ai_analyze') }}</button>
-      <span class="run-msg" id="ai-msg"></span>
-    </div>
-    <div class="range-picker">
-      {% for option in [1, 7, 14, 30] %}
-        <a href="/domain/{{ domain }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
-      {% endfor %}
-    </div>
+  <div class="range-picker">
+    {% for option in [1, 7, 14, 30] %}
+      <a href="/domain/{{ domain }}?lang={{ lang }}&days={{ option }}" class="{{ 'active' if days == option }}">{{ option }}d</a>
+    {% endfor %}
   </div>
-</div>
-
-<div class="card" id="ai-summary-card" style="display:none; margin-bottom:16px">
-  <div class="card-title">{{ t('ai_analyze.title') }}</div>
-  <div id="ai-summary-text" style="font-size:14px; line-height:1.5; margin-top:6px"></div>
 </div>
 
 <div class="kpi-panel">
@@ -70,8 +59,20 @@
 </div>
 
 {# --- What is wrong, in words -------------------------------------------- #}
+<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:24px">
+  <h2 style="margin:0">{{ t('section.attention') }} {% if status.flags %}<span class="hint">{{ t('section.attention_hint') }}</span>{% endif %}</h2>
+  <div class="run-now">
+    <button type="button" class="btn btn-primary" style="font-size:13.5px; padding:9px 18px" id="ai-analyze">🤖 {{ t('action.ai_analyze') }}</button>
+    <span class="run-msg" id="ai-msg"></span>
+  </div>
+</div>
+
+<div class="card" id="ai-summary-card" style="display:none; margin:12px 0 16px">
+  <div class="card-title">{{ t('ai_analyze.title') }}</div>
+  <div id="ai-summary-text" style="font-size:14px; line-height:1.5; margin-top:6px"></div>
+</div>
+
 {% if status.flags %}
-  <h2>{{ t('section.attention') }} <span class="hint">{{ t('section.attention_hint') }}</span></h2>
   <div class="flags">
     {% for flag in status.flags %}
       <div class="flag {{ flag.severity }}">
@@ -93,7 +94,6 @@
     {% endfor %}
   </div>
 {% else %}
-  <h2>{{ t('section.attention') }}</h2>
   <div class="empty">{{ t('empty.nothing_flagged', days=days) }}</div>
 {% endif %}
 
