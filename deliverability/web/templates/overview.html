@@ -253,37 +253,46 @@ const DAYS = {{ days }};
 const LANG = {{ lang | tojson }};
 const T_RUNNING = {{ t('action.running') | tojson }};
 
-// "Check everything": fire each stream, then poll until none are in flight and
-// reload so the page shows the freshly ingested data.
+// "Check everything": run each stream to completion before starting the
+// next, then reload so the page shows the freshly ingested data.
+//
+// Deliberately sequential, not fire-all-four-then-poll-once: each POST
+// starts a background thread and returns immediately, so firing all four
+// back to back meant all four ran concurrently in the same process —
+// peak memory was the sum of all four at once, not just the largest one.
+// On a memory-constrained host that is what was tipping ingestion into an
+// OOM kill. Waiting for each one to actually finish before starting the
+// next keeps peak memory to roughly one stream's worth, at the cost of
+// the whole run taking longer wall-clock time — a fine trade for a
+// background job nobody is staring at.
 (function () {
   const btn = document.getElementById('run-all');
   const msg = document.getElementById('run-msg');
   if (!btn) return;
 
-  async function poll() {
-    const res = await fetch('/api/run/status');
-    const data = await res.json();
-    if (data.running && data.running.length) {
-      msg.textContent = `${T_RUNNING} (${data.running.join(', ')})`;
-      setTimeout(poll, 1500);
-    } else {
-      window.location.reload();
+  async function waitUntilFinished(stream) {
+    while (true) {
+      const res = await fetch('/api/run/status');
+      const data = await res.json();
+      if (!data.running || !data.running.includes(stream)) return;
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
   }
 
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.classList.add('is-running');
-    msg.innerHTML = '<span class="spin"></span> ' + T_RUNNING;
     // Bounces are the time-sensitive stream, so they go first.
     for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
+      msg.innerHTML = '<span class="spin"></span> ' + `${T_RUNNING} (${stream})`;
       try {
         await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });
+        await waitUntilFinished(stream);
       } catch (err) {
         /* keep going — one failing stream should not stop the rest */
       }
     }
-    setTimeout(poll, 1200);
+    window.location.reload();
   });
 })();
 

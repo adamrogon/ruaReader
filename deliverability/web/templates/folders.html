@@ -164,34 +164,41 @@ const T_RUNNING = {{ t('action.running') | tojson }};
 
 // Same "check everything" control as the domain views — global ingestion
 // isn't folder-scoped, so it belongs on the home page too.
+//
+// Sequential, not fire-all-four-then-poll-once: each POST starts a
+// background thread and returns immediately, so firing all four back to
+// back ran all four concurrently in the same process — peak memory was
+// the sum of all four at once, which is what was tipping ingestion into
+// an OOM kill on a memory-constrained host. Waiting for each to actually
+// finish before starting the next keeps peak memory to roughly one
+// stream's worth.
 (function () {
   const btn = document.getElementById('run-all');
   const msg = document.getElementById('run-msg');
   if (!btn) return;
 
-  async function poll() {
-    const res = await fetch('/api/run/status');
-    const data = await res.json();
-    if (data.running && data.running.length) {
-      msg.textContent = `${T_RUNNING} (${data.running.join(', ')})`;
-      setTimeout(poll, 1500);
-    } else {
-      window.location.reload();
+  async function waitUntilFinished(stream) {
+    while (true) {
+      const res = await fetch('/api/run/status');
+      const data = await res.json();
+      if (!data.running || !data.running.includes(stream)) return;
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
   }
 
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.classList.add('is-running');
-    msg.innerHTML = '<span class="spin"></span> ' + T_RUNNING;
     for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
+      msg.innerHTML = '<span class="spin"></span> ' + `${T_RUNNING} (${stream})`;
       try {
         await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });
+        await waitUntilFinished(stream);
       } catch (err) {
         /* keep going — one failing stream should not stop the rest */
       }
     }
-    setTimeout(poll, 1200);
+    window.location.reload();
   });
 })();
 
