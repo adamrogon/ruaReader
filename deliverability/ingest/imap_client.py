@@ -35,6 +35,16 @@ def open_mailbox(mailbox: Mailbox) -> Iterator[IMAPClient]:
             logger.debug("IMAP logout failed for %s", mailbox.name, exc_info=True)
 
 
+# If this many *consecutive* per-UID fetches fail during fallback, the
+# connection itself is broken, not one odd message — stop trying the rest
+# individually. Without this cap, a genuinely dead connection turned "one
+# fast batch failure" into up to 50 sequential ~60s socket timeouts (the
+# IMAPClient timeout in open_mailbox) — a single bad mailbox could then
+# hang the whole ingestion run for the better part of an hour instead of
+# failing fast the way it used to.
+_MAX_CONSECUTIVE_FALLBACK_FAILURES = 3
+
+
 def _fetch_batch_with_fallback(client: IMAPClient, uids: List[int]) -> Dict[int, Dict[bytes, Any]]:
     """Fetch a batch of UIDs, recovering from a transient server error.
 
@@ -43,7 +53,9 @@ def _fetch_batch_with_fallback(client: IMAPClient, uids: List[int]) -> Dict[int,
     single oversized/odd message) — the other 49 shouldn't be lost over it.
     One immediate retry clears most transient hiccups; if it doesn't, fall
     back to fetching one UID at a time so only the genuinely bad message is
-    skipped (and logged), not the whole batch.
+    skipped (and logged), not the whole batch — but bail out of that
+    fallback fast if it's clearly the connection, not a message, that's bad
+    (see _MAX_CONSECUTIVE_FALLBACK_FAILURES).
     """
     try:
         return client.fetch(uids, ["RFC822"])
@@ -58,11 +70,22 @@ def _fetch_batch_with_fallback(client: IMAPClient, uids: List[int]) -> Dict[int,
         )
 
     response: Dict[int, Dict[bytes, Any]] = {}
+    consecutive_failures = 0
     for uid in uids:
         try:
             response.update(client.fetch([uid], ["RFC822"]))
+            consecutive_failures = 0
         except Exception:  # noqa: BLE001
             logger.warning("Skipping message %s — server would not fetch it", uid, exc_info=True)
+            consecutive_failures += 1
+            if consecutive_failures >= _MAX_CONSECUTIVE_FALLBACK_FAILURES:
+                logger.warning(
+                    "%d fetches in a row failed — treating this as a broken connection, "
+                    "not skipping the remaining %d messages one by one",
+                    consecutive_failures,
+                    len(uids) - uids.index(uid) - 1,
+                )
+                break
     return response
 
 
