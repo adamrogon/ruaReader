@@ -317,7 +317,16 @@ def run(
 
     for mailbox in mailboxes:
         try:
-            stats = ingest_mailbox(mailbox, repository, settings.recipient_hash_salt, since_days=since_days)
+            try:
+                stats = ingest_mailbox(mailbox, repository, settings.recipient_hash_salt, since_days=since_days)
+            except Exception:  # noqa: BLE001
+                # ingest_mailbox() opens its own connection, so retrying the
+                # whole call gets a fresh IMAPClient/socket instead of
+                # reusing whatever the first attempt left in a bad state —
+                # covers connection-level failures (e.g. an SSL write error)
+                # a batch-level retry inside fetch_messages() can't fix.
+                logger.warning("Bounce ingestion failed for %s, retrying once with a fresh connection", mailbox.name)
+                stats = ingest_mailbox(mailbox, repository, settings.recipient_hash_salt, since_days=since_days)
             per_mailbox[mailbox.name] = stats
             for key, value in stats.items():
                 totals[key] = totals.get(key, 0) + value

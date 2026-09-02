@@ -307,7 +307,17 @@ def run(
 
     for mailbox in mailboxes:
         try:
-            stats = ingest_mailbox(mailbox, repository, settings, since_days=since_days, offline=offline)
+            try:
+                stats = ingest_mailbox(mailbox, repository, settings, since_days=since_days, offline=offline)
+            except Exception:  # noqa: BLE001
+                # ingest_mailbox() opens its own connection, so retrying the
+                # whole call gets a fresh IMAPClient/socket rather than
+                # reusing whatever the first attempt left in a bad state —
+                # relevant for connection-level failures a batch-level retry
+                # can't fix (e.g. an SSL write error after the connection
+                # has been held open across two folders for a while).
+                logger.warning("rua ingestion failed for %s, retrying once with a fresh connection", mailbox.name)
+                stats = ingest_mailbox(mailbox, repository, settings, since_days=since_days, offline=offline)
             per_mailbox[mailbox.name] = stats
             for key, value in stats.items():
                 totals[key] = totals.get(key, 0) + value
