@@ -11,7 +11,7 @@ import email
 import logging
 from contextlib import contextmanager
 from email.message import Message
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from imapclient import IMAPClient
 
@@ -94,11 +94,21 @@ def fetch_messages(
     since: Optional[dt.date] = None,
     unseen_only: bool = False,
     limit: Optional[int] = None,
+    predicate: Optional[Callable[[Message], bool]] = None,
 ) -> List[Tuple[int, Message]]:
     """Fetch messages as ``(uid, parsed_message)`` pairs.
 
     Deduplication happens against the database rather than via the \\Seen flag,
     so a re-run over already-read mail is harmless.
+
+    ``predicate``, if given, is checked right after each message is parsed —
+    a message that fails it is dropped immediately rather than being held in
+    the returned list. Bounce mailboxes are the reason this exists: most
+    messages in a 7-day window aren't actual NDRs, and unlike a DMARC XML
+    report a bounce can carry the entire original message (images, HTML,
+    attachments) echoed back by the mail server — keeping every one of those
+    in memory for the whole mailbox before filtering was a real contributor
+    to ingestion running out of memory on a constrained host.
     """
     criteria: List = []
     if unseen_only:
@@ -124,7 +134,10 @@ def fetch_messages(
             raw = data.get(b"RFC822")
             if not raw:
                 continue
-            results.append((uid, email.message_from_bytes(raw)))
+            message = email.message_from_bytes(raw)
+            if predicate is not None and not predicate(message):
+                continue
+            results.append((uid, message))
     return results
 
 

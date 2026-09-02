@@ -260,13 +260,19 @@ def ingest_mailbox(
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=since_days)).date()
 
     with open_mailbox(mailbox) as client:
-        messages = fetch_messages(client, since=since)
+        # Filtered at fetch time, not after: most messages in a mailbox
+        # window are not bounces, and unlike a compact DMARC XML report a
+        # bounce can carry the entire original message echoed back (images,
+        # HTML, attachments) — holding every non-bounce message in memory
+        # too, just to discard it a moment later, was real memory pressure
+        # for no reason. "messages" below is therefore a count of candidates
+        # that passed the cheap looks_like_bounce() check, not the whole
+        # mailbox's traffic.
+        messages = fetch_messages(client, since=since, predicate=looks_like_bounce)
         stats["messages"] = len(messages)
 
         candidates: List[Tuple[int, Dict[str, Any]]] = []
         for uid, message in messages:
-            if not looks_like_bounce(message):
-                continue
             stats["bounces_found"] += 1
             try:
                 candidates.append((uid, parse_bounce(message, mailbox, salt)))
