@@ -917,11 +917,16 @@ class IngestionRunRepository(_BaseRepository):
         with self.db.connect() as conn:
             return sorted({row[0] for row in conn.execute(stmt)})
 
-    def fail_stale_running(self, older_than_minutes: int = 60) -> int:
+    def fail_stale_running(self, older_than_minutes: int = 30) -> int:
         """Mark long-abandoned 'running' rows as errors.
 
         A process killed mid-run leaves its row at 'running' forever, which
         would otherwise block that stream from ever being started again.
+        Was 60 minutes — observed full-fleet runs top out around 30, so 60
+        meant a genuinely dead run (a killed process, a hung connection)
+        could block that stream for up to an hour before self-healing.
+        30 keeps comfortable headroom above the slowest legitimate run
+        while halving the worst-case blocked time.
         """
         cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=older_than_minutes)
         with self.db.connect() as conn:
