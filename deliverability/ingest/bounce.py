@@ -69,16 +69,25 @@ def hash_recipient(address: str, salt: str) -> str:
 
 
 def looks_like_bounce(message: Message) -> bool:
-    """Cheap pre-filter before doing the work of parsing."""
+    """Cheap pre-filter before doing the work of parsing.
+
+    Headers are coerced through ``str()``, not just ``... or ""`` — the
+    ``email`` package occasionally hands back a non-string, truthy object
+    instead of a plain str (a ``Header`` instance for an oddly-encoded
+    Subject; a ``(charset, language, value)`` tuple from ``get_param`` for
+    an RFC 2231-encoded parameter). ``or ""`` only catches ``None``, so a
+    message with one of those slipped straight into ``re.search()`` and
+    crashed the whole mailbox instead of just being skipped.
+    """
     content_type = (message.get_content_type() or "").lower()
     if content_type == "multipart/report":
-        report_type = (message.get_param("report-type") or "").lower()
+        report_type = str(message.get_param("report-type") or "").lower()
         if report_type == "delivery-status":
             return True
-    subject = message.get("Subject") or ""
+    subject = str(message.get("Subject") or "")
     if _DMARC_REPORT_SUBJECT.search(subject):
         return False
-    sender = message.get("From") or ""
+    sender = str(message.get("From") or "")
     return bool(_BOUNCE_SUBJECTS.search(subject) or _BOUNCE_SENDERS.search(sender))
 
 
@@ -166,7 +175,10 @@ def parse_bounce(message: Message, mailbox: Mailbox, salt: str) -> Dict[str, Any
     ``parse_ok = False`` and the full text preserved.
     """
     raw_text = message_text(message)
-    subject = message.get("Subject") or ""
+    # str(): see looks_like_bounce's docstring — get() can hand back a
+    # non-string, truthy Header object that "or ''" alone doesn't catch,
+    # and this function's own "never raises" promise depends on it.
+    subject = str(message.get("Subject") or "")
     fields = parse_delivery_status(message) or {}
 
     status_code = None
@@ -230,7 +242,7 @@ def parse_bounce(message: Message, mailbox: Mailbox, salt: str) -> Dict[str, Any
     return {
         "sending_domain": mailbox.domain,
         "mailbox_name": mailbox.name,
-        "message_id": (message.get("Message-Id") or "").strip() or f"no-id-{hash_recipient(subject + str(header_datetime(message)), salt)[:32]}",
+        "message_id": str(message.get("Message-Id") or "").strip() or f"no-id-{hash_recipient(subject + str(header_datetime(message)), salt)[:32]}",
         "received_at": header_datetime(message),
         "status_code": status_code,
         "smtp_code": smtp_match.group(1) if smtp_match else None,

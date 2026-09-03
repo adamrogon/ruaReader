@@ -178,7 +178,11 @@ def iter_attachments(message: Message) -> Iterator[Tuple[str, bytes]]:
         if part.get_content_maintype() == "multipart":
             continue
         filename = part.get_filename() or ""
-        disposition = (part.get("Content-Disposition") or "").lower()
+        # str(): get() can hand back a non-string, truthy Header object for
+        # an oddly-encoded header — "or ''" alone doesn't catch that, only
+        # a real None. Seen crash a bounce mailbox on a Subject header this
+        # same way; cheap to guard here too since this is shared by rua.
+        disposition = str(part.get("Content-Disposition") or "").lower()
         content_type = part.get_content_type()
 
         is_attachment = "attachment" in disposition or bool(filename)
