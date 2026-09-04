@@ -53,7 +53,9 @@
     </div>
     <div class="kpi {{ 'is-warning' if totals.bounces_total else '' }}">
       <div class="kpi-label">{{ t('kpi.bounces') }}</div>
-      <div class="kpi-value">{{ totals.bounces_total }}</div>
+      {% set bounce_pct = (totals.bounces_total / totals.messages * 100) if totals.messages else none %}
+      <div class="kpi-value">{% if bounce_pct is not none %}{{ "%.1f"|format(bounce_pct) }}%{% else %}—{% endif %}</div>
+      <div class="kpi-sub">{{ "{:,}".format(totals.bounces_total) }}/{{ "{:,}".format(totals.messages) }}</div>
     </div>
   </div>
 </div>
@@ -112,7 +114,10 @@
 
       <div class="metric">
         <div class="metric-label">{{ t('metric.bounces') }}</div>
-        <div class="metric-value {{ 'is-warning' if row.bounces_total else 'is-dim' }}">{{ row.bounces_total }}</div>
+        {% set row_bounce_pct = (row.bounces_total / row.messages * 100) if row.messages else none %}
+        <div class="metric-value {{ 'is-warning' if row.bounces_total else 'is-dim' }}">
+          {% if row_bounce_pct is not none %}{{ "%.1f"|format(row_bounce_pct) }}%{% else %}—{% endif %}
+        </div>
       </div>
 
       <div class="metric">
