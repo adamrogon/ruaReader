@@ -58,7 +58,17 @@ _NOT_SENDER_BLOCK_PHRASES = re.compile(
     r"does\s*not\s*exist|"
     r"account\s+does\s+not\s+exist|"
     r"mailbox\s+(is\s+)?full|"             # 5.7.x used for full mailboxes at some hosts
-    r"whitelist(?!\s*.{0,30}(policy|reputation|block))",  # whitelist-of-known-senders, not reputation
+    r"whitelist(?!\s*.{0,30}(policy|reputation|block))|"  # whitelist-of-known-senders, not reputation
+    # Microsoft's 5.7.509 (and equivalent text elsewhere) fires when a
+    # message fails DMARC evaluation and this domain's OWN DMARC record says
+    # p=reject — the provider is enforcing our policy, not passing judgement
+    # on our reputation. In practice this is almost always collateral from
+    # the recipient forwarding mail onward (breaking alignment at the final
+    # hop) or a genuine SPF/DKIM gap in one specific sending path — neither
+    # is "this provider doesn't trust us", so it must not drive a
+    # pause-sending alarm the way an actual reputation block does.
+    r"does\s*not\s*pass\s*dmarc|dmarc\s*policy\s*of\s*reject|failed\s*(the\s*)?"
+    r"(provider'?s\s*)?dmarc\s*(evaluation|verification|check)?",
     re.IGNORECASE,
 )
 
@@ -98,7 +108,13 @@ _CODE_EXPLANATIONS = {
     ),
     "5.7.28": "The provider is rate-limiting or blocking this IP for suspicious sending volume.",
     "5.7.508": "The provider saw abnormal traffic from this sender and is refusing it.",
-    "5.7.509": "The message failed the provider's DMARC evaluation and was rejected.",
+    "5.7.509": (
+        "Not a reputation block: the provider is enforcing YOUR OWN domain's DMARC policy "
+        "(p=reject) against a message that failed DMARC on arrival. Usually means the recipient "
+        "forwards mail onward and the forwarded copy loses SPF/DKIM alignment at the final hop, "
+        "or that this specific message went out via a sending path not covered by your SPF/DKIM. "
+        "Not evidence the provider distrusts this domain."
+    ),
     "5.7.511": "The sender is on the recipient's block list.",
     "5.7.606": "The sending IP is blocked by the provider's reputation system.",
     "5.7.708": "Access denied — the provider has blocked this IP range for reputation reasons.",

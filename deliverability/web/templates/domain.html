@@ -207,10 +207,10 @@
     <thead>
       <tr>
         <th style="text-align:left">{{ t('table.latest') }}</th>
-        <th style="text-align:left" class="th-hint" title="{{ t('table.code_hint') }}">{{ t('table.code') }}</th>
-        <th style="text-align:left" class="th-hint" title="{{ t('table.class_hint') }}">{{ t('table.class') }}</th>
+        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.code_hint') }}">{{ t('table.code') }}</th>
+        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.class_hint') }}">{{ t('table.class') }}</th>
         <th style="text-align:left">{{ t('table.provider') }}</th>
-        <th style="text-align:left" class="th-hint" title="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
+        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
         <th>{{ t('table.count') }}</th>
       </tr>
     </thead>
@@ -301,7 +301,7 @@
         <tr>
           <th style="text-align:left">{{ t('table.ip') }}</th>
           <th style="text-align:left">{{ t('table.source') }}</th>
-          <th style="text-align:left">{{ t('table.status') }}</th>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.status_hint') }}">{{ t('table.status') }}</th>
           <th style="text-align:left">{{ t('table.blacklists') }}</th>
           <th style="text-align:left">{{ t('table.last_checked') }}</th>
         </tr>
@@ -315,8 +315,8 @@
             </td>
             <td style="text-align:left" class="num-dim">{{ (row.ip_source or '—') | upper }}</td>
             <td style="text-align:left">
-              {% if row.listed %}<span class="badge critical">{{ t('status.listed') }}</span>
-              {% else %}<span class="badge ok">{{ t('status.clean') }}</span>{% endif %}
+              {% if row.listed %}<span class="badge critical th-hint" data-hint="{{ t('status.listed_hint') }}">{{ t('status.listed') }}</span>
+              {% else %}<span class="badge ok th-hint" data-hint="{{ t('status.clean_hint') }}">{{ t('status.clean') }}</span>{% endif %}
             </td>
             <td style="text-align:left">
               {% if row.listed and row.listed_by %}{{ row.listed_by | join(', ') }}{% else %}—{% endif %}
@@ -337,7 +337,14 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th style="text-align:left">{{ t('table.source_ip') }}</th><th style="text-align:left">{{ t('table.host') }}</th><th style="text-align:left">{{ t('table.dkim') }}</th><th style="text-align:left">{{ t('table.spf') }}</th><th style="text-align:left">{{ t('table.disposition') }}</th><th>{{ t('table.messages') }}</th></tr>
+        <tr>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.source_ip_hint') }}">{{ t('table.source_ip') }}</th>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.host_hint') }}">{{ t('table.host') }}</th>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.dkim_result_hint') }}">{{ t('table.dkim') }}</th>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.spf_result_hint') }}">{{ t('table.spf') }}</th>
+          <th style="text-align:left" class="th-hint" data-hint="{{ t('table.disposition_hint') }}">{{ t('table.disposition') }}</th>
+          <th>{{ t('table.messages') }}</th>
+        </tr>
       </thead>
       <tbody>
         {% for row in top_failing %}
@@ -379,7 +386,7 @@
 {% macro sort_th(col, label, default_order='desc', align='left', hint=none) %}
   {%- set is_active = bounce_pagination.sort == col %}
   {%- set arrow = ('↑' if bounce_pagination.order == 'asc' else '↓') if is_active else '' %}
-  <th style="text-align:{{ align }}" {% if hint %}class="th-hint" title="{{ hint }}"{% endif %}>
+  <th style="text-align:{{ align }}" {% if hint %}class="th-hint" data-hint="{{ hint }}"{% endif %}>
     <a class="sort-link {{ 'is-active' if is_active }}" href="{{ sort_url(col, default_order) | trim }}">
       {{ label }} <span class="sort-arrow">{{ arrow or '↕' }}</span>
     </a>
@@ -395,7 +402,7 @@
         {{ sort_th('status_code', t('table.code'), 'asc', hint=t('table.code_hint')) }}
         {{ sort_th('class', t('table.class'), 'asc', hint=t('table.class_hint')) }}
         {{ sort_th('recipient_domain', t('table.recipient_domain'), 'asc') }}
-        <th style="text-align:left" class="th-hint" title="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
+        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
         <th>{{ t('table.parsed') }}</th>
       </tr>
     </thead>

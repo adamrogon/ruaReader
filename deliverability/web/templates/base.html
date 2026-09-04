@@ -155,6 +155,37 @@
       };
     }
 
+    // Generic hover tooltips for any element carrying data-hint="...": table
+    // headers, status badges, etc. Built the same way as the chart-legend
+    // tooltips above (and sharing the same #legend-tip box) rather than a
+    // plain title="" attribute — native title tooltips turned out to be
+    // unreliable in practice (some environments show only the help cursor
+    // and never the text itself), where this custom one is guaranteed to
+    // render and appears instantly instead of after the browser's own delay.
+    // One delegated listener on <body> covers every page, including content
+    // rendered after load, rather than binding per-element.
+    (function () {
+      let activeHintEl = null;
+      document.body.addEventListener('mousemove', (evt) => {
+        const el = evt.target.closest('[data-hint]');
+        if (!el) {
+          if (activeHintEl) { legendTip.style.display = 'none'; activeHintEl = null; }
+          return;
+        }
+        if (el !== activeHintEl) {
+          activeHintEl = el;
+          legendTip.textContent = el.getAttribute('data-hint');
+        }
+        legendTip.style.left = (evt.clientX + 14) + 'px';
+        legendTip.style.top = (evt.clientY + 14) + 'px';
+        legendTip.style.display = 'block';
+      });
+      document.body.addEventListener('mouseleave', () => {
+        legendTip.style.display = 'none';
+        activeHintEl = null;
+      });
+    })();
+
     (function () {
       const btn = document.getElementById('theme-toggle');
       const moonIcon = btn.querySelector('.icon-moon');

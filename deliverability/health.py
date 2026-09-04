@@ -43,6 +43,12 @@ SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2, "ok": 3}
 # a badly-set-up filter) and does not warrant the same alarm — so it becomes
 # a lesser warning instead of a critical block. See MAJOR_ESPS below.
 URGENCY_SENDER_BLOCK = 1000
+# A single rejection at a major provider is real but weaker evidence than a
+# recurring one — at some majors (Microsoft in particular) a lone 5.7.x is
+# routinely just one recipient organisation's own locally-configured rule,
+# not a domain-wide reputation verdict. Treated as a warning, not a critical,
+# until it recurs — see _weight_for() in build_domain_status().
+URGENCY_SENDER_BLOCK_SINGLE_MAJOR = 500
 URGENCY_SENDER_BLOCK_MINOR = 150
 URGENCY_BLACKLISTED = 800
 # A listing on a DNSBL that only lists whole netblocks/ASNs (UCEProtect
@@ -317,9 +323,18 @@ def build_domain_status(
         for row in sender_blocks:
             by_esp[row.get("recipient_esp") or "Unknown"] = by_esp.get(row.get("recipient_esp") or "Unknown", 0) + 1
 
-        def _weight_for(esp_name: str) -> tuple:
+        def _weight_for(esp_name: str, count: int) -> tuple:
             """severity, urgency_weight, title_key, message_key for this ESP."""
             if esp_name in MAJOR_ESPS:
+                if count == 1:
+                    # One rejection is real signal but not yet proof of a
+                    # domain-wide problem — see URGENCY_SENDER_BLOCK_SINGLE_MAJOR.
+                    return (
+                        "warning",
+                        URGENCY_SENDER_BLOCK_SINGLE_MAJOR,
+                        "flag.sender_block.title_single_major",
+                        "flag.sender_block.message_single_major",
+                    )
                 return "critical", URGENCY_SENDER_BLOCK, "flag.sender_block.title", "flag.sender_block.message"
             return "warning", URGENCY_SENDER_BLOCK_MINOR, "flag.sender_block.title_minor", "flag.sender_block.message_minor"
 
@@ -331,7 +346,7 @@ def build_domain_status(
             key=lambda kv: (kv[0] not in MAJOR_ESPS, -kv[1]),
         )
         for esp, count in ranked:
-            severity, weight, title_key, message_key = _weight_for(esp)
+            severity, weight, title_key, message_key = _weight_for(esp, count)
             codes = sorted({
                 row.get("status_code") for row in sender_blocks
                 if (row.get("recipient_esp") or "Unknown") == esp and row.get("status_code")

@@ -86,6 +86,12 @@ MESSAGES: dict = {
     "table.provider": {"pl": "Dostawca", "en": "Provider"},
     "table.messages": {"pl": "Wiadomości", "en": "Messages"},
     "table.disposition": {"pl": "Dyspozycja", "en": "Disposition"},
+    "table.disposition_hint": {
+        "pl": "Co odbiorca zrobił z tą wiadomością zgodnie z polityką DMARC domeny: odrzucono, wysłano "
+        "do kwarantanny (najczęściej trafia do spamu), albo mimo błędu i tak przepuszczono.",
+        "en": "What the receiver did with the message per the domain's DMARC policy: rejected outright, "
+        "sent to quarantine (usually the spam folder), or delivered anyway despite the failure.",
+    },
     "disposition.reject": {"pl": "odrzucono", "en": "rejected"},
     "disposition.quarantine": {"pl": "kwarantanna", "en": "quarantined"},
     "disposition.none": {"pl": "przepuszczono", "en": "delivered anyway"},
@@ -237,11 +243,18 @@ MESSAGES: dict = {
         "en": "Highest-volume failing sources",
     },
     "section.failing_sources_hint": {
-        "pl": "adresy IP wysyłające jako Twoja domena, ale bez ważnego SPF/DKIM — typowo zapomniany "
-        "dawny dostawca, nowa usługa której nie dodano do SPF, albo ktoś podszywający się. Dane "
-        "z raportów DMARC.",
-        "en": "IPs sending as your domain but without valid SPF/DKIM — typically a forgotten former "
-        "provider, a new service not yet in SPF, or someone spoofing you. Sourced from DMARC reports.",
+        "pl": "Adresy IP, które sam odbiorca zgłosił w raporcie DMARC (pole source_ip) jako nadawcę "
+        "wiadomości podpisanej From: Twoja domena — ale bez ważnego SPF/DKIM tej domeny. To nie jest "
+        "przekierowywanie wiadomości (to liczone jest osobno, jako Przekierowane w tabeli wyżej) — "
+        "to konkretny serwer, który połączył się z odbiorcą i przedstawił się jako Wy. Zwykle chodzi o "
+        "jedno z trzech: zapomniany dawny dostawca wciąż coś wysyłający w tle, nową usługę nigdy nie "
+        "dodaną do SPF, albo kogoś podszywającego się pod domenę.",
+        "en": "IP addresses the receiver's own DMARC report names directly (its source_ip field) as "
+        "having sent a message signed From: your domain — but without valid SPF/DKIM for it. This "
+        "isn't forwarding (that's tracked separately, as Forwarded in the table above) — it's a "
+        "specific server that connected to the receiver and claimed to be you. Usually one of three "
+        "things: a forgotten former provider still sending in the background, a new service that was "
+        "never added to SPF, or someone spoofing this domain.",
     },
     "section.blacklist_ips": {"pl": "Adresy IP i blacklisty", "en": "IP addresses and blacklists"},
     "section.blacklist_ips_hint": {
@@ -251,10 +264,33 @@ MESSAGES: dict = {
     "table.ip": {"pl": "Adres IP", "en": "IP address"},
     "table.source": {"pl": "Źródło", "en": "Source"},
     "table.status": {"pl": "Status", "en": "Status"},
+    "table.status_hint": {
+        "pl": "Czy ten adres IP figuruje na którejś antyspamowej czarnej liście (DNSBL) w momencie "
+        "ostatniego sprawdzenia. To nie znaczy, że wysyłka jest faktycznie blokowana przez "
+        "konkretnego odbiorcę — to sygnał ryzyka, sprawdź kolumnę 'Blacklisty', by ocenić wagę.",
+        "en": "Whether this IP address was found on any anti-spam blacklist (DNSBL) as of the last "
+        "check. It doesn't mean a specific recipient is actually blocking mail from it — it's a risk "
+        "signal; check the 'Blacklists' column to gauge how serious it is.",
+    },
     "table.blacklists": {"pl": "Blacklisty", "en": "Blacklists"},
     "table.last_checked": {"pl": "Ostatnio sprawdzono", "en": "Last checked"},
     "status.clean": {"pl": "Czysty", "en": "Clean"},
+    "status.clean_hint": {
+        "pl": "Ten adres IP nie figurował na żadnej sprawdzanej przez nas czarnej liście podczas "
+        "ostatniego sprawdzenia.",
+        "en": "This IP wasn't found on any of the blacklists we check, as of the last check.",
+    },
     "status.listed": {"pl": "Zablokowany", "en": "Listed"},
+    "status.listed_hint": {
+        "pl": "Ten adres IP figuruje na przynajmniej jednej antyspamowej czarnej liście (DNSBL) — nazwy "
+        "w kolumnie 'Blacklisty' obok. To NIE znaczy automatycznie, że każdy odbiorca odrzuca Waszą "
+        "pocztę: niektóre listy (np. Spamhaus, Barracuda) są szeroko respektowane, inne (np. "
+        "UCEProtect poziom 2/3) dotyczą całego bloku adresów hostingu, nie konkretnie Was.",
+        "en": "This IP is on at least one anti-spam blacklist (DNSBL) — see the names in the "
+        "'Blacklists' column. This does NOT automatically mean every recipient is rejecting your "
+        "mail: some lists (Spamhaus, Barracuda) are widely honoured, others (e.g. UCEProtect level "
+        "2/3) flag the whole hosting netblock, not specifically you.",
+    },
     "empty.blacklist_not_checked": {
         "pl": "Brak sprawdzonych adresów IP dla tej domeny jeszcze.",
         "en": "No checked IP addresses for this domain yet.",
@@ -291,9 +327,31 @@ MESSAGES: dict = {
     },
     "table.count": {"pl": "Liczba", "en": "Count"},
     "table.source_ip": {"pl": "IP źródłowe", "en": "Source IP"},
+    "table.source_ip_hint": {
+        "pl": "Adres IP, który wg raportu DMARC faktycznie połączył się z serwerem odbiorcy i wysłał "
+        "wiadomość podpisaną jako ta domena.",
+        "en": "The IP address that, per the DMARC report, actually connected to the receiver's server "
+        "and sent a message signed as this domain.",
+    },
     "table.host": {"pl": "Host", "en": "Host"},
+    "table.host_hint": {
+        "pl": "Reverse DNS (PTR) tego adresu IP, jeśli istnieje — pomaga rozpoznać, czyj to serwer.",
+        "en": "Reverse DNS (PTR) for that IP, when it has one — helps identify whose server it is.",
+    },
     "table.dkim": {"pl": "DKIM", "en": "DKIM"},
+    "table.dkim_result_hint": {
+        "pl": "Wynik weryfikacji DKIM dla tego źródła. 'fail'/'brak' oznacza, że wiadomość nie miała "
+        "ważnego podpisu DKIM tej domeny.",
+        "en": "The DKIM verification result for this source. 'fail'/'none' means the message had no "
+        "valid DKIM signature for this domain.",
+    },
     "table.spf": {"pl": "SPF", "en": "SPF"},
+    "table.spf_result_hint": {
+        "pl": "Wynik weryfikacji SPF dla tego źródła. 'fail'/'brak' oznacza, że ten adres IP nie jest "
+        "wpisany do rekordu SPF tej domeny.",
+        "en": "The SPF verification result for this source. 'fail'/'none' means this IP isn't listed "
+        "in the domain's SPF record.",
+    },
     "table.unparsed": {"pl": "nieprzetworzone", "en": "unparsed"},
 
     "bounce_class.hard": {"pl": "twarde", "en": "hard"},
@@ -419,6 +477,32 @@ MESSAGES: dict = {
         "**What to do:** check the bounce log below if you want to understand why (often a local "
         "policy of the receiver: whitelist, custom filter). Only start acting on it if the same "
         "code shows up at one of the major providers.",
+    },
+    # "Single major" variant: the rejecting ESP IS one of the majors, but this
+    # is its first/only rejection so far — real signal, but weaker than a
+    # recurring one. Warning severity, softer advice than the full critical
+    # variant (no "pause sending" instruction yet).
+    "flag.sender_block.title_single_major": {
+        "pl": "Jedno odrzucenie u {esp} (duży dostawca)",
+        "en": "One rejection at {esp} (a major provider)",
+    },
+    "flag.sender_block.message_single_major": {
+        "pl": "{esp} odrzucił jedną wiadomość z tej domeny{codes_suffix}. To duży dostawca, więc warto "
+        "to obserwować — ale **samo pojedyncze odrzucenie zwykle jeszcze nie oznacza problemu z "
+        "reputacją całej domeny**. U niektórych dużych dostawców (np. Microsoft) pojedynczy kod "
+        "5.7.x bywa lokalną regułą ustawioną przez jedną konkretną organizację odbiorcy, a nie "
+        "ogólną blokadą wobec Was.\n\n"
+        "**Co zrobić:** nie musisz jeszcze wstrzymywać wysyłki. Zerknij do treści odrzucenia w logu "
+        "odbić poniżej. Zacznij traktować to poważnie — i realnie rozważ wstrzymanie wysyłki — jeśli "
+        "w najbliższych dniach pojawi się kolejne odrzucenie u {esp}, zwłaszcza u innego odbiorcy.",
+        "en": "{esp} rejected one message from this domain{codes_suffix}. This is a major provider, "
+        "so it's worth watching — but **a single rejection on its own usually doesn't mean a "
+        "domain-wide reputation problem yet**. At some major providers (Microsoft, for instance), a "
+        "lone 5.7.x code is often a rule set locally by one specific recipient organization, not a "
+        "blanket block against you.\n\n"
+        "**What to do:** no need to pause sending yet. Check the rejection's full text in the bounce "
+        "log below. Start taking it seriously — and genuinely consider pausing — if another rejection "
+        "shows up at {esp} in the coming days, especially at a different recipient.",
     },
 
     # --- Flags: blacklist ------------------------------------------------------
