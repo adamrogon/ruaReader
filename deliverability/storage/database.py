@@ -6,15 +6,18 @@ import SQLAlchemy directly.
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
 
-from sqlalchemy import Connection, create_engine, event
+from sqlalchemy import Connection, create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 
 from ..config import Settings
 from .schema import metadata
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
@@ -52,8 +55,33 @@ class Database:
                 cursor.close()
 
     def create_all(self) -> None:
-        """Create any missing tables. Safe to call on every run."""
+        """Create any missing tables, and add any missing columns to existing ones.
+
+        ``metadata.create_all()`` only creates tables that don't exist yet — it
+        never alters a table that is already there, so a column added to
+        schema.py after a database already has real data (e.g. the
+        ``blacklist_checks.ptr_hostname`` hint) would otherwise never appear on
+        an existing install. Both SQLite and Postgres support ``ADD COLUMN``
+        for a plain nullable column, so this stays a safe, idempotent no-op
+        once the column exists — safe to run on every startup, including a
+        brand-new database where create_all() just created it already.
+        """
         metadata.create_all(self.engine)
+        inspector = inspect(self.engine)
+        with self.engine.begin() as conn:
+            for table in metadata.tables.values():
+                if not inspector.has_table(table.name):
+                    continue
+                existing = {col["name"] for col in inspector.get_columns(table.name)}
+                for column in table.columns:
+                    if column.name in existing:
+                        continue
+                    try:
+                        col_type = column.type.compile(self.engine.dialect)
+                        conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'))
+                        logger.info("Added missing column %s.%s", table.name, column.name)
+                    except Exception:  # noqa: BLE001 — never block startup over a schema tweak
+                        logger.warning("Could not add column %s.%s", table.name, column.name, exc_info=True)
 
     @contextmanager
     def connect(self) -> Iterator[Connection]:

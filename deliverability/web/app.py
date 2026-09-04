@@ -22,6 +22,9 @@ from fastapi.templating import Jinja2Templates
 
 from .. import jobs
 from ..classify.esp import ESP_DISPLAY_ORDER
+from ..classify.esp import OTHER as ESP_OTHER
+from ..classify.esp import UNKNOWN as ESP_UNKNOWN
+from ..classify.esp import esp_from_org_name
 from ..config import Mailbox, Settings, load_domains
 from ..health import STALENESS_HOURS, domain_statuses, ingestion_health, localize_ingestion_health
 from ..insights import summarize_domain
@@ -176,6 +179,24 @@ def _bounce_code_help(code: Optional[str], lang: str) -> str:
     key = f"bounce.code_help.{code}"
     resolved = translate(key, lang)
     return "" if resolved == key else resolved
+
+
+def _ip_hint(ptr_hostname: Optional[str]) -> Optional[str]:
+    """A short, honest identification hint for a blacklist-checked IP.
+
+    Built only from the PTR hostname already captured at ingest time (see
+    ``ingest/blacklist.py``) — never a live lookup here, since this runs on
+    every page render. Shows the raw hostname, and when it matches a known
+    provider's pattern (the same table used to label ESPs elsewhere in the
+    app), appends that provider's friendly name too — e.g.
+    "mail123.ovh.net (OVH)". Returns None when there's no PTR record to show.
+    """
+    if not ptr_hostname:
+        return None
+    label = esp_from_org_name(ptr_hostname)
+    if label in (ESP_OTHER, ESP_UNKNOWN):
+        return ptr_hostname
+    return f"{ptr_hostname} ({label})"
 
 
 def _trim_diagnostic(text: Optional[str], max_len: int = 250) -> str:
@@ -508,10 +529,13 @@ def domain_detail(
     # names the first 3 IPs (see health.py), this is the untruncated source
     # of truth for actually filing delisting requests. Listed IPs first, same
     # "most urgent first" convention as everywhere else in this app.
-    blacklist_rows = sorted(
-        BlacklistRepository(database, settings.project_id).latest_per_domain().get(domain, []),
-        key=lambda r: (not r["listed"], r["ip"]),
-    )
+    blacklist_rows = [
+        dict(row, hint=_ip_hint(row.get("ptr_hostname")))
+        for row in sorted(
+            BlacklistRepository(database, settings.project_id).latest_per_domain().get(domain, []),
+            key=lambda r: (not r["listed"], r["ip"]),
+        )
+    ]
 
     # Consolidated "what's actually happening" table — folds the old separate
     # "sender blocks" and "bounce codes" panels into one row-per-signature

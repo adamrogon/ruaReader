@@ -117,9 +117,31 @@ MESSAGES: dict = {
         "en": "Sender blocks are the signal that matters most.",
     },
     "chart.legend.passed": {"pl": "Zaliczone", "en": "Passed"},
+    "chart.legend.passed_hint": {
+        "pl": "Wiadomości, które przeszły DMARC — SPF lub DKIM były zgodne z tą domeną.",
+        "en": "Messages that passed DMARC — SPF or DKIM aligned with this domain.",
+    },
     "chart.legend.forwarded": {"pl": "Przekierowane", "en": "Forwarded"},
+    "chart.legend.forwarded_hint": {
+        "pl": "Wiadomości przekazane dalej przez kogoś innego (np. listę mailingową) — SPF zwykle nie "
+        "przechodzi, ale DKIM tak. To nie jest błąd konfiguracji tej domeny, więc nie liczy się do "
+        "zgodności.",
+        "en": "Messages relayed onward by someone else (e.g. a mailing list) — SPF usually fails but "
+        "DKIM still passes. Not a problem with this domain's own setup, so it's excluded from the "
+        "compliance math.",
+    },
     "chart.legend.failed": {"pl": "Niezaliczone", "en": "Failed"},
+    "chart.legend.failed_hint": {
+        "pl": "Wiadomości, które nie przeszły ani SPF, ani DKIM zgodnego z tą domeną — realne ryzyko dla "
+        "dostarczalności.",
+        "en": "Messages that failed both SPF and DKIM alignment for this domain — a real deliverability "
+        "risk.",
+    },
     "chart.legend.compliance": {"pl": "Zgodność %", "en": "Compliance %"},
+    "chart.legend.compliance_hint": {
+        "pl": "Zaliczone ÷ (zaliczone + niezaliczone). Przekierowane nie są wliczane.",
+        "en": "Passed ÷ (passed + failed). Forwarded messages are excluded.",
+    },
     "chart.legend.sender_block": {"pl": "Blokada nadawcy", "en": "Sender block"},
     "chart.legend.hard": {"pl": "Twarde", "en": "Hard"},
     "chart.legend.soft": {"pl": "Miękkie", "en": "Soft"},
@@ -171,7 +193,15 @@ MESSAGES: dict = {
     "day.no_bounces": {"pl": "Brak odbić tego dnia.", "en": "No bounces this day."},
     "table.domain": {"pl": "Domena", "en": "Domain"},
     "table.spf_fail": {"pl": "SPF Fail", "en": "SPF Fail"},
+    "table.spf_fail_hint": {
+        "pl": "Liczba wiadomości tego dnia, które nie przeszły weryfikacji SPF względem tej domeny.",
+        "en": "Count of messages that day which failed SPF alignment for this domain.",
+    },
     "table.dkim_fail": {"pl": "DKIM Fail", "en": "DKIM Fail"},
+    "table.dkim_fail_hint": {
+        "pl": "Liczba wiadomości tego dnia, które nie przeszły weryfikacji DKIM względem tej domeny.",
+        "en": "Count of messages that day which failed DKIM alignment for this domain.",
+    },
     "table.reason": {"pl": "Powód", "en": "Reason"},
     "table.esp": {"pl": "ESP", "en": "ESP"},
     "section.attention": {"pl": "Co wymaga uwagi", "en": "What needs attention"},
@@ -236,8 +266,29 @@ MESSAGES: dict = {
 
     "table.when": {"pl": "Kiedy", "en": "When"},
     "table.code": {"pl": "Kod", "en": "Code"},
+    "table.code_hint": {
+        "pl": "Rozszerzony kod statusu SMTP (RFC 3463), np. 5.7.1 = odrzucenie ze względu na politykę "
+        "nadawcy. Pierwsza cyfra mówi, jak poważny jest problem: 2 = sukces, 4 = błąd tymczasowy, "
+        "5 = błąd trwały.",
+        "en": "Enhanced SMTP status code (RFC 3463), e.g. 5.7.1 = rejected on sender-policy grounds. "
+        "The first digit says how serious it is: 2 = success, 4 = temporary failure, 5 = permanent failure.",
+    },
     "table.diagnostic": {"pl": "Diagnostyka", "en": "Diagnostic"},
+    "table.diagnostic_hint": {
+        "pl": "Surowa treść komunikatu zwrotnego (bounce message) od serwera odbiorcy — dokładny powód "
+        "odrzucenia w jego własnych słowach.",
+        "en": "The raw text of the bounce message from the receiving server — the exact reason for "
+        "rejection, in its own words.",
+    },
     "table.class": {"pl": "Klasa", "en": "Class"},
+    "table.class_hint": {
+        "pl": "Jak sklasyfikowaliśmy to odbicie: twarde (trwały błąd konkretnego adresu), miękkie "
+        "(tymczasowy problem), blokada nadawcy (odrzucona cała domena/IP, nie jeden adres) albo "
+        "nieznane (nie udało się rozpoznać kodu).",
+        "en": "How this bounce was classified: hard (a permanent failure of one address), soft (a "
+        "temporary issue), sender block (the whole domain/IP was rejected, not one address), or "
+        "unknown (the code couldn't be parsed).",
+    },
     "table.count": {"pl": "Liczba", "en": "Count"},
     "table.source_ip": {"pl": "IP źródłowe", "en": "Source IP"},
     "table.host": {"pl": "Host", "en": "Host"},

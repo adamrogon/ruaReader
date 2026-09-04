@@ -25,6 +25,11 @@
   {% set qs_days = '&days=' ~ days if days is defined else '' %}
   {% set path = ('/domain/' ~ domain) if domain is defined else '/' %}
 
+  {# Floating tooltip for chart legend items — Chart.js draws the legend on
+     canvas, so a native title="" attribute doesn't work there; this one HTML
+     element is reused by every chart's legendHintHandlers() below. #}
+  <div id="legend-tip" class="legend-tip" style="display:none"></div>
+
   <div class="topbar">
     <a href="/?lang={{ lang }}{{ qs_days }}" class="topbar-logo">
       <img src="/static/logo-black.svg" alt="Linkhouse" height="22" class="logo-light">
@@ -123,6 +128,32 @@
       };
     }
     const TOOLTIP = tooltipTheme();
+
+    // Legend hover tooltips: Chart.js legends are drawn on canvas, not real
+    // DOM elements, so there's no title="" to hang a native browser tooltip
+    // off. Instead, a chart passes { [legend label]: explanation } here and
+    // gets back onHover/onLeave handlers to spread into its own
+    // plugins.legend — they show/hide the one shared #legend-tip div,
+    // positioned next to the cursor.
+    const legendTip = document.getElementById('legend-tip');
+    function legendHintHandlers(hints) {
+      return {
+        onHover(evt, legendItem, legend) {
+          const text = hints[legendItem.text];
+          legend.chart.canvas.style.cursor = text ? 'help' : 'default';
+          if (!text) { legendTip.style.display = 'none'; return; }
+          const rect = legend.chart.canvas.getBoundingClientRect();
+          legendTip.textContent = text;
+          legendTip.style.left = (rect.left + (evt.x || 0) + 14) + 'px';
+          legendTip.style.top = (rect.top + (evt.y || 0) + 14) + 'px';
+          legendTip.style.display = 'block';
+        },
+        onLeave(_evt, _legendItem, legend) {
+          legend.chart.canvas.style.cursor = 'default';
+          legendTip.style.display = 'none';
+        },
+      };
+    }
 
     (function () {
       const btn = document.getElementById('theme-toggle');

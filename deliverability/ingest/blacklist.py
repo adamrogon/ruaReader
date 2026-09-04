@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import dns.exception
 import dns.resolver
+import dns.reversename
 from pydnsbl import DNSBLIpChecker
 
 from ..config import Domain, Settings, load_domains
@@ -131,12 +132,29 @@ def sending_ips_for_domain(
     return pairs
 
 
+def _reverse_dns(ip: str, resolver: dns.resolver.Resolver) -> Optional[str]:
+    """Best-effort PTR lookup — purely an identifying hint for the dashboard.
+
+    Plenty of IPs (especially shared cloud/ESP ranges) simply have no PTR
+    record, or the query times out; either way this must never fail the
+    actual blacklist check over it. Runs only here, during ingestion — never
+    on page load, per the "dashboard reads from the DB only" rule.
+    """
+    try:
+        rev_name = dns.reversename.from_address(ip)
+        answer = resolver.resolve(rev_name, "PTR")
+        return str(answer[0]).rstrip(".")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def check_ip(
     checker: DNSBLIpChecker,
     ip: str,
     source: str,
     domain: str,
     checked_at: Optional[dt.datetime] = None,
+    resolver: Optional[dns.resolver.Resolver] = None,
 ) -> Dict[str, Any]:
     """Check one IP and build a storable row.
 
@@ -149,6 +167,7 @@ def check_ip(
         "domain": domain,
         "ip": ip,
         "ip_source": source,
+        "ptr_hostname": _reverse_dns(ip, resolver or _resolver()),
         "checked_at": checked_at or dt.datetime.now(dt.timezone.utc),
         "listed": False,
         "listed_by": [],
@@ -221,7 +240,9 @@ def run(
             if not pairs:
                 detail[domain.name] = {"ips": 0, "note": "No sending IPs found in SPF or MX."}
                 continue
-            domain_rows = [check_ip(checker, ip, source, domain.name, checked_at) for ip, source in pairs]
+            domain_rows = [
+                check_ip(checker, ip, source, domain.name, checked_at, resolver=resolver) for ip, source in pairs
+            ]
             rows.extend(domain_rows)
             detail[domain.name] = {
                 "ips": len(domain_rows),

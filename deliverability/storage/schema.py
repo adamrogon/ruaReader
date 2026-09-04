@@ -184,6 +184,10 @@ blacklist_checks = Table(
     Column("domain", String(255), nullable=False, index=True),
     Column("ip", String(64), nullable=False, index=True),
     Column("ip_source", String(64)),  # 'spf' | 'mx' — where the IP came from
+    # Best-effort PTR (reverse DNS) hostname, captured once at ingest time —
+    # purely an identifying hint for the dashboard ("whose IP is this?"), not
+    # used in any classification logic. Null when the host has no PTR record.
+    Column("ptr_hostname", String(255)),
     Column("checked_at", DateTime, nullable=False, index=True),
     Column("listed", Boolean, nullable=False, default=False),
     Column("listed_by", JSON),  # names of the DNSBLs listing this IP
