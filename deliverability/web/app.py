@@ -19,6 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 
 from .. import jobs
 from ..classify.esp import ESP_DISPLAY_ORDER
@@ -153,38 +154,194 @@ USE_CASES: List[Dict[str, str]] = [
         "related_key": "use_cases.failing_sources.related",
         "title_key": "use_cases.failing_sources.title",
         "body_key": "use_cases.failing_sources.body",
+        "mockup": "failing_sources",
     },
     {
         "related_key": "use_cases.sender_block_reading.related",
         "title_key": "use_cases.sender_block_reading.title",
         "body_key": "use_cases.sender_block_reading.body",
+        "mockup": "sender_block_reading",
     },
     {
         "related_key": "use_cases.single_vs_recurring.related",
         "title_key": "use_cases.single_vs_recurring.title",
         "body_key": "use_cases.single_vs_recurring.body",
+        "mockup": "single_vs_recurring",
     },
     {
         "related_key": "use_cases.blacklist_context.related",
         "title_key": "use_cases.blacklist_context.title",
         "body_key": "use_cases.blacklist_context.body",
+        "mockup": "blacklist_context",
     },
     {
         "related_key": "use_cases.forwarding_vs_failure.related",
         "title_key": "use_cases.forwarding_vs_failure.title",
         "body_key": "use_cases.forwarding_vs_failure.body",
+        "mockup": "forwarding_vs_failure",
     },
     {
         "related_key": "use_cases.spf_lookup_limit.related",
         "title_key": "use_cases.spf_lookup_limit.title",
         "body_key": "use_cases.spf_lookup_limit.body",
+        "mockup": "spf_lookup_limit",
     },
     {
         "related_key": "use_cases.daily_triage.related",
         "title_key": "use_cases.daily_triage.title",
         "body_key": "use_cases.daily_triage.body",
+        "mockup": "daily_triage",
     },
 ]
+
+
+def _mockup_failing_sources(lang: str) -> str:
+    """Before/after: an unrecognized IP identified and added to SPF (the
+    aftermarket.pl / EmailLabs story) — fabricated IP and hostname, not real."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    return f"""
+    <div class="uc-mockup-row">
+      <div class="uc-mockup-col">
+        <div class="uc-mockup-label">{t_('use_cases.mockup.before')}</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th style="text-align:left">{t_('table.source_ip')}</th><th style="text-align:left">{t_('table.host')}</th><th style="text-align:left">{t_('table.spf')}</th></tr></thead>
+            <tbody>
+              <tr class="uc-row-bad">
+                <td class="mono">203.0.113.42</td>
+                <td class="num-dim">mail07.emaillabs.example</td>
+                <td class="num-bad">fail</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="uc-mockup-note">{t_('use_cases.mockup.host_lookup_note')}</div>
+      </div>
+      <div class="uc-mockup-arrow">&rarr;</div>
+      <div class="uc-mockup-col">
+        <div class="uc-mockup-label">{t_('use_cases.mockup.after')}</div>
+        <div class="uc-mockup-metric">
+          <span class="num-ok" style="font-size:24px;font-weight:700">99.4%</span>
+          <span class="num-dim" style="font-size:12px">{t_('table.compliance')} (91.2% &rarr; 99.4%)</span>
+        </div>
+        <div class="uc-mockup-note">{t_('use_cases.mockup.fixed_note')}</div>
+      </div>
+    </div>
+    """
+
+
+def _mockup_sender_block_reading(lang: str) -> str:
+    """Two diagnostic codes side by side: a genuine reputation block vs.
+    Microsoft's DMARC-self-rejection 5.7.509 — fabricated diagnostic text
+    shortened from the real wording, not a screenshot of real mail."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    return f"""
+    <div class="uc-mockup-row">
+      <div class="uc-mockup-col">
+        <span class="badge critical">5.7.1</span>
+        <div class="mono uc-mockup-diag">"...blocked... reputation..."</div>
+        <div class="uc-mockup-note">{t_('use_cases.mockup.real_block_note')}</div>
+      </div>
+      <div class="uc-mockup-col">
+        <span class="badge neutral">5.7.509</span>
+        <div class="mono uc-mockup-diag">"...does not pass DMARC verification..."</div>
+        <div class="uc-mockup-note">{t_('use_cases.mockup.not_block_note')}</div>
+      </div>
+    </div>
+    """
+
+
+def _mockup_single_vs_recurring(lang: str) -> str:
+    """Two flag cards, reusing the real flag copy (with fake ESP/counts) so
+    the wording matches exactly what the domain page would actually show."""
+    single = translate("flag.sender_block.title_single_major", lang, esp="Google", count=1)
+    recurring = translate("flag.sender_block.title", lang, esp="Microsoft", count=3)
+    warn = translate("severity.warning", lang)
+    crit = translate("severity.critical", lang)
+    return f"""
+    <div class="flags" style="gap:8px">
+      <div class="flag warning uc-flag-mock">
+        <div class="flag-head"><span class="flag-title">{single}</span><span class="badge warning">{warn}</span></div>
+      </div>
+      <div class="flag critical uc-flag-mock">
+        <div class="flag-head"><span class="flag-title">{recurring}</span><span class="badge critical">{crit}</span></div>
+      </div>
+    </div>
+    """
+
+
+def _mockup_blacklist_context(lang: str) -> str:
+    """A high-signal list vs. a netblock-wide one, same 'Listed' badge either
+    way — fabricated IPs, illustrating that the list name is what matters."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    listed = t_("status.listed")
+    return f"""
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="text-align:left">{t_('table.ip')}</th><th style="text-align:left">{t_('table.status')}</th><th style="text-align:left">{t_('table.blacklists')}</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">203.0.113.10</td><td><span class="badge critical">{listed}</span></td><td>zen.spamhaus.org</td></tr>
+          <tr><td class="mono">203.0.113.55</td><td><span class="badge critical">{listed}</span></td><td>dnsbl-3.uceprotect.net</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="uc-mockup-note">{t_('use_cases.mockup.blacklist_action_note')}</div>
+    <div class="uc-mockup-note">{t_('use_cases.mockup.blacklist_ignore_note')}</div>
+    """
+
+
+def _mockup_forwarding_vs_failure(lang: str) -> str:
+    """A mini stacked bar with the same three-way split (Passed/Forwarded/
+    Failed) and colors as the real volume chart — made-up percentages."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    passed, forwarded, failed = t_("chart.legend.passed"), t_("chart.legend.forwarded"), t_("chart.legend.failed")
+    return f"""
+    <div class="uc-stackbar">
+      <div class="uc-stackbar-seg uc-bar-pass" style="width:70%"></div>
+      <div class="uc-stackbar-seg uc-bar-fwd" style="width:25%"></div>
+      <div class="uc-stackbar-seg uc-bar-fail" style="width:5%"></div>
+    </div>
+    <div class="uc-stackbar-legend">
+      <span><i class="uc-dot uc-bar-pass"></i>{passed} 70%</span>
+      <span><i class="uc-dot uc-bar-fwd"></i>{forwarded} 25%</span>
+      <span><i class="uc-dot uc-bar-fail"></i>{failed} 5%</span>
+    </div>
+    <div class="uc-mockup-note">{t_('use_cases.mockup.forwarding_focus_note')}</div>
+    """
+
+
+def _mockup_spf_lookup_limit(lang: str) -> str:
+    """The over-limit badge exactly as it renders on the domain page, with a
+    made-up include list."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    return f"""
+    <div><span class="badge critical">{t_('dns.lookups_of_limit', count=11, limit=10)}</span></div>
+    <div class="uc-mockup-note" style="margin-top:8px">
+      <span class="mono">include:old-esp.example (3)</span> &mdash; {t_('use_cases.mockup.spf_remove_note')}
+    </div>
+    """
+
+
+def _mockup_daily_triage(lang: str) -> str:
+    """A mini urgency-sorted domain list — made-up domain names."""
+    t_ = lambda key, **kw: translate(key, lang, **kw)  # noqa: E731
+    crit, warn, ok = t_("severity.critical"), t_("severity.warning"), t_("badge.healthy")
+    return f"""
+    <div class="uc-domain-row"><span class="badge critical">{crit}</span><span class="mono">example-domain-a.com</span></div>
+    <div class="uc-domain-row"><span class="badge warning">{warn}</span><span class="mono">example-domain-b.com</span></div>
+    <div class="uc-domain-row"><span class="badge ok">{ok}</span><span class="mono">example-domain-c.com</span><span class="num-dim">{t_('use_cases.mockup.skip_note')}</span></div>
+    """
+
+
+_USE_CASE_MOCKUPS = {
+    "failing_sources": _mockup_failing_sources,
+    "sender_block_reading": _mockup_sender_block_reading,
+    "single_vs_recurring": _mockup_single_vs_recurring,
+    "blacklist_context": _mockup_blacklist_context,
+    "forwarding_vs_failure": _mockup_forwarding_vs_failure,
+    "spf_lookup_limit": _mockup_spf_lookup_limit,
+    "daily_triage": _mockup_daily_triage,
+}
 
 
 def _static_version() -> str:
@@ -999,17 +1156,29 @@ def _settings_context(
 def use_cases_page(request: Request):
     """Onboarding page: what each chart/table on a domain page tells you and
     what to do about it, illustrated with real cases worked through in this
-    tool. Static content (see USE_CASES above) — no data fetching."""
+    tool. Static content (see USE_CASES above) — no data fetching.
+
+    Each entry also gets a small hand-built "mockup" — fabricated data laid
+    out with the exact same CSS the real dashboard uses, captioned as
+    illustrative — never a screenshot or a live query, since real customer
+    numbers change and this page's job is to teach the shape of a problem,
+    not report current status."""
     lang = _resolve_request_lang(request)
     use_cases = [
         {
             "related": translate(item["related_key"], lang),
             "title": translate(item["title_key"], lang),
             "body_html": _use_case_body_html(translate(item["body_key"], lang)),
+            "mockup_html": Markup(_USE_CASE_MOCKUPS[item["mockup"]](lang)),
         }
         for item in USE_CASES
     ]
-    return _render(request, "use_cases.html", lang, {"page": "use_cases", "use_cases": use_cases})
+    return _render(
+        request,
+        "use_cases.html",
+        lang,
+        {"page": "use_cases", "use_cases": use_cases, "mockup_disclaimer": translate("use_cases.mockup_disclaimer", lang)},
+    )
 
 
 @app.get("/settings")

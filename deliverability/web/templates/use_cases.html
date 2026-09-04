@@ -15,6 +15,10 @@
       <span class="usecase-related">{{ uc.related }}</span>
       <div class="usecase-title">{{ loop.index }}. {{ uc.title }}</div>
       <div class="flag-msg usecase-body">{{ uc.body_html }}</div>
+      <div class="uc-mockup">
+        <div class="uc-mockup-caption">{{ mockup_disclaimer }}</div>
+        {{ uc.mockup_html }}
+      </div>
     </div>
   {% endfor %}
 </div>

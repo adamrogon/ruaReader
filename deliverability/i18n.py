@@ -1547,6 +1547,50 @@ MESSAGES: dict = {
         "reports something — most problems (blocks, a compliance drop, a blacklist hit) show up here "
         "long before anyone notices them on the sending side.",
     },
+
+    # --- Use cases page: mockup annotations -------------------------------------
+    # Short labels for the hand-built, fake-data illustrations under each use
+    # case (see _use_case_mockup_html in app.py). Never real customer data —
+    # every mockup is captioned with use_cases.mockup_disclaimer to say so.
+    "use_cases.mockup_disclaimer": {
+        "pl": "Dane ilustracyjne — nie prawdziwe dane klienta",
+        "en": "Illustrative data — not a real customer's data",
+    },
+    "use_cases.mockup.before": {"pl": "PRZED", "en": "BEFORE"},
+    "use_cases.mockup.after": {"pl": "PO", "en": "AFTER"},
+    "use_cases.mockup.host_lookup_note": {
+        "pl": "🔍 sprawdzone: to serwer EmailLabs, stary dostawca",
+        "en": "🔍 checked: this is an EmailLabs server, an old provider",
+    },
+    "use_cases.mockup.fixed_note": {
+        "pl": "✅ zakres dodany do SPF",
+        "en": "✅ range added to SPF",
+    },
+    "use_cases.mockup.real_block_note": {
+        "pl": "🚫 to realna blokada reputacji",
+        "en": "🚫 this is a real reputation block",
+    },
+    "use_cases.mockup.not_block_note": {
+        "pl": "✅ to NIE blokada — to Wasza własna polityka DMARC",
+        "en": "✅ this is NOT a block — it's your own DMARC policy",
+    },
+    "use_cases.mockup.blacklist_action_note": {
+        "pl": "🔴 Spamhaus — sprawdź od razu",
+        "en": "🔴 Spamhaus — check right away",
+    },
+    "use_cases.mockup.blacklist_ignore_note": {
+        "pl": "🟡 UCEProtect — zwykle nic nie trzeba robić",
+        "en": "🟡 UCEProtect — usually nothing to do",
+    },
+    "use_cases.mockup.forwarding_focus_note": {
+        "pl": "👉 tylko czerwony pasek (Niezaliczone) to realny problem",
+        "en": "👉 only the red segment (Failed) is a real problem",
+    },
+    "use_cases.mockup.spf_remove_note": {
+        "pl": "usuń nieużywanego dostawcę z SPF → licznik spada",
+        "en": "remove the unused provider from SPF → the counter drops",
+    },
+    "use_cases.mockup.skip_note": {"pl": "— zdrowa, pomiń", "en": "— healthy, skip"},
 }
 
 
