@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ t('use_cases.title') }} · Deliverability Monitor{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 style="margin-top:6px">{{ t('use_cases.title') }}</h1>
+    <p>{{ t('use_cases.intro') }}</p>
+  </div>
+</div>
+
+<div class="usecase-list">
+  {% for uc in use_cases %}
+    <div class="usecase-card">
+      <span class="usecase-related">{{ uc.related }}</span>
+      <div class="usecase-title">{{ loop.index }}. {{ uc.title }}</div>
+      <div class="flag-msg usecase-body">{{ uc.body_html }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

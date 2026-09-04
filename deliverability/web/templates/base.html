@@ -67,6 +67,12 @@
         </svg>
         <span class="side-tooltip">{{ t('nav.overview') }}</span>
       </a>
+      <a href="/use-cases?lang={{ lang }}" class="side-icon {{ 'active' if nav_page == 'use_cases' }}" title="{{ t('nav.use_cases') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18h6M10 22h4M12 2a6.5 6.5 0 0 0-4 11.6c.6.5 1 1.3 1 2.15V16a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-.25c0-.85.4-1.65 1-2.15A6.5 6.5 0 0 0 12 2z"></path>
+        </svg>
+        <span class="side-tooltip">{{ t('nav.use_cases') }}</span>
+      </a>
       <a href="/settings?lang={{ lang }}" class="side-icon {{ 'active' if nav_page == 'settings' }}" title="{{ t('nav.settings') }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>

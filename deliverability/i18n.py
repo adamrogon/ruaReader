@@ -1265,6 +1265,288 @@ MESSAGES: dict = {
         "en": "One central mailbox is enough for every domain at once — no need to add it per domain.",
     },
     "settings.no_rua_nudge_cta": {"pl": "Dodaj skrzynkę rua", "en": "Add rua mailbox"},
+
+    # --- Use cases page ---------------------------------------------------------
+    # Onboarding content for people who are new to the dashboard: for each major
+    # chart/table/section on a domain page, a real worked example ("what does
+    # this tell us, what do we actually do about it") rather than an abstract
+    # feature description. Every example here is a real investigation done
+    # while building this tool, not a hypothetical.
+    "nav.use_cases": {"pl": "Use case'y", "en": "Use cases"},
+    "use_cases.title": {"pl": "Use case'y", "en": "Use cases"},
+    "use_cases.intro": {
+        "pl": "Konkretne przykłady, jak czytać to, co widzicie na stronie domeny, i co realnie zrobić z "
+        "daną informacją — każdy oparty na prawdziwym przypadku sprawdzonym w tym narzędziu, nie na "
+        "teorii.",
+        "en": "Concrete examples of how to read what you see on a domain page, and what to actually do "
+        "about it — every one of these is a real case worked through with this tool, not a hypothetical.",
+    },
+
+    "use_cases.failing_sources.related": {
+        "pl": "Dotyczy: \"Źródła z największym wolumenem błędów\" na stronie domeny",
+        "en": "Relates to: \"Highest-volume failing sources\" on the domain page",
+    },
+    "use_cases.failing_sources.title": {
+        "pl": "Namierz zapomnianego nadawcę po adresie IP",
+        "en": "Track down a forgotten sender by its IP address",
+    },
+    "use_cases.failing_sources.body": {
+        "pl": "Ta tabela pokazuje adresy IP, które odbiorca (Gmail, Outlook itp.) sam zgłosił w raporcie "
+        "DMARC jako wysyłające pocztę podpisaną Waszą domeną — ale bez ważnego SPF/DKIM tej domeny. "
+        "Innymi słowy: ktoś (albo coś) wysyła w Waszym imieniu, a Wy tego nie autoryzowaliście.\n\n"
+        "**Przykład z tego narzędzia:** domena aftermarket.pl zaczęła pokazywać w tej tabeli adres IP z "
+        "dużym wolumenem niezaliczonych wiadomości. Serwer wysyłkowy w skrzynce wyglądał na Gmaila, więc "
+        "pierwsza reakcja mogłaby być \"to na pewno nie nasz problem, przecież wysyłamy z Google "
+        "Workspace\". Ale sprawdzenie samego adresu IP (Host w tej tabeli, czyli reverse DNS) pokazało, "
+        "że to serwer EmailLabs — starego dostawcy do cold mailingu, którego ktoś kiedyś podpiął pod tę "
+        "domenę i nigdy nie wyłączył. Ten dostawca miał opublikowany własny zakres SPF, tylko nikt nigdy "
+        "nie dodał go do rekordu SPF tej domeny.\n\n"
+        "**Co zrobić, gdy zobaczysz to u siebie:** sprawdź kolumnę Host w tej tabeli — reverse DNS "
+        "adresu IP często od razu zdradza dostawcę. Jeśli host nic nie mówi, wklej sam adres IP do "
+        "wyszukiwarki, żeby ustalić właściciela. Potem zdecyduj: jeśli to Wasz zapomniany, wciąż "
+        "używany serwis — dodajcie jego zakres do rekordu SPF (dokładnie to zrobiliśmy dla "
+        "aftermarket.pl — zgodność od razu wzrosła, bo te wiadomości zaczęły przechodzić); jeśli to "
+        "usługa, której nikt w firmie nie rozpoznaje, traktujcie to jako możliwe podszywanie się i "
+        "zbadajcie sprawę zanim cokolwiek dodacie do SPF.",
+        "en": "This table shows IP addresses the receiver (Gmail, Outlook, etc.) itself named in a "
+        "DMARC report as having sent mail signed with your domain — but without valid SPF/DKIM for it. "
+        "In other words: someone (or something) is sending on your behalf that you never authorized.\n\n"
+        "**A real example from this tool:** the domain aftermarket.pl started showing an IP in this "
+        "table with a large volume of failed messages. The sending server in the mailbox looked like "
+        "Gmail, so the first instinct could be \"this can't be our problem, we send from Google "
+        "Workspace\". But checking the IP itself (the Host column here, its reverse DNS) showed it was "
+        "actually an EmailLabs server — an old cold-outreach provider someone had wired into this "
+        "domain long ago and never turned off. That provider had its own published SPF range; nobody "
+        "had ever added it to the domain's SPF record.\n\n"
+        "**What to do when you see this:** check the Host column in this table — the IP's reverse DNS "
+        "often names the provider outright. If the host tells you nothing, paste the raw IP into a "
+        "search engine to find its owner. Then decide: if it's a forgotten service you still actually "
+        "use, add its range to your SPF record (exactly what we did for aftermarket.pl — compliance "
+        "went up immediately once those messages started passing); if it's a service nobody in the "
+        "company recognizes, treat it as possible spoofing and investigate before adding anything to "
+        "SPF.",
+    },
+
+    "use_cases.sender_block_reading.related": {
+        "pl": "Dotyczy: \"Co wymaga uwagi\" i \"Log odbić\" na stronie domeny",
+        "en": "Relates to: \"What needs attention\" and the bounce log on the domain page",
+    },
+    "use_cases.sender_block_reading.title": {
+        "pl": "Czerwony alert nie zawsze znaczy \"przestań wysyłać\"",
+        "en": "A red alert doesn't always mean \"stop sending\"",
+    },
+    "use_cases.sender_block_reading.body": {
+        "pl": "Kod 5.7.x w logu odbić zwykle oznacza, że dostawca odrzucił Waszą pocztę na podstawie "
+        "reputacji — to najpoważniejszy typ alertu w tym narzędziu. Ale sam numer kodu to nie wszystko "
+        "— liczy się dokładna treść komunikatu w kolumnie Diagnostyka.\n\n"
+        "**Przykład z tego narzędzia:** linkhousenetwork.com miał czerwony alert od Microsoftu z kodem "
+        "5.7.509. Treść brzmiała: \"sending domain does not pass DMARC verification and has a DMARC "
+        "policy of reject\". Wyglądało to groźnie, ale po przeczytaniu diagnostyki okazało się, że to "
+        "NIE jest blokada reputacji — to Microsoft egzekwujący naszą WŁASNĄ politykę DMARC (p=reject) "
+        "na wiadomości, która nie przeszła DMARC po drodze. Typowa przyczyna: odbiorca przekierowuje "
+        "pocztę dalej, a przekierowana kopia traci wyrównanie SPF/DKIM na ostatnim etapie. Po tym "
+        "odkryciu poprawiliśmy klasyfikację w narzędziu, więc ten konkretny kod już nie generuje "
+        "fałszywego czerwonego alertu.\n\n"
+        "**Co zrobić:** zanim zaczniesz działać na czerwonym alercie, przeczytaj pełną treść w logu "
+        "odbić poniżej (albo skorzystaj z podpowiedzi 💡 pod kodem w podsumowaniu odbić — każdy "
+        "rozpoznany kod ma tam dodatkowe wyjaśnienie). Sprawdź, czy to faktyczna odmowa reputacyjna "
+        "(słowa typu blocked, reputation, spam, banned), czy raczej coś technicznego po stronie "
+        "uwierzytelniania czy przekierowań.",
+        "en": "A 5.7.x code in the bounce log usually means the provider rejected your mail on "
+        "reputation grounds — the most serious alert type in this tool. But the code number alone "
+        "isn't the whole story — the exact wording in the Diagnostic column is what actually matters.\n\n"
+        "**A real example from this tool:** linkhousenetwork.com had a red alert from Microsoft with "
+        "code 5.7.509. The text read: \"sending domain does not pass DMARC verification and has a "
+        "DMARC policy of reject\". That looked alarming, but reading the diagnostic showed it was NOT "
+        "a reputation block — it was Microsoft enforcing OUR OWN DMARC policy (p=reject) against a "
+        "message that failed DMARC somewhere along the way. The usual cause: the recipient forwards "
+        "mail onward, and the forwarded copy loses SPF/DKIM alignment at the final hop. Once we found "
+        "this, we fixed the tool's classification, so this specific code no longer raises a false red "
+        "alert.\n\n"
+        "**What to do:** before acting on a red alert, read the full text in the bounce log below (or "
+        "use the 💡 hint under the code in the bounce summary — every recognized code has an extra "
+        "explanation there). Check whether it's an actual reputation refusal (words like blocked, "
+        "reputation, spam, banned), or something more technical around authentication or forwarding.",
+    },
+
+    "use_cases.blacklist_context.related": {
+        "pl": "Dotyczy: \"Adresy IP i blacklisty\" na stronie domeny",
+        "en": "Relates to: \"IP addresses and blacklists\" on the domain page",
+    },
+    "use_cases.blacklist_context.title": {
+        "pl": "Wpis na blackliście nie zawsze wymaga akcji",
+        "en": "A blacklist hit doesn't always need action",
+    },
+    "use_cases.blacklist_context.body": {
+        "pl": "Sekcja \"Adresy IP i blacklisty\" pokazuje, czy którykolwiek z Waszych adresów wysyłkowych "
+        "figuruje na antyspamowej czarnej liście (DNSBL). Nie każdy wpis znaczy to samo — liczy się, na "
+        "jakiej konkretnie liście i dlaczego.\n\n"
+        "**Przykład z tego narzędzia:** jeden z adresów IP aftermarket.pl trafił na listę Spamhaus PBL "
+        "(Policy Block List). PBL nie oznacza \"ten adres wysyła spam\" — to lista adresów, które sam "
+        "ich właściciel/dostawca zgłosił jako \"to nie powinien być serwer wysyłkowy\" (typowo zakresy "
+        "dynamiczne albo hostingowe). Po sprawdzeniu okazało się, że to dokładnie ten sam zakres "
+        "EmailLabs z przykładu o źródłach błędów wyżej — dostawca sam opublikował go jako PBL, bo część "
+        "jego puli nie jest przeznaczona do bezpośredniej wysyłki. To nie był sygnał \"jesteśmy "
+        "spamerami\", tylko konsekwencja korzystania z zakresu, który dostawca sam oznaczył jako \"nie "
+        "do wysyłki\".\n\n"
+        "**Co zrobić:** sprawdź nazwę listy w kolumnie Blacklisty. Spamhaus ZEN/SBL/XBL, Barracuda, "
+        "SpamCop — traktuj poważnie, to listy, na które realnie patrzą duzi odbiorcy. UCEProtect "
+        "poziom 2/3 czy PBL — zwykle dotyczy całego zakresu hostingu albo polityki dostawcy, nie "
+        "konkretnie Waszej reputacji; sprawdź bezpośrednio na stronie listy (np. spamhaus.org/lookup), "
+        "zanim zaczniesz cokolwiek zmieniać.",
+        "en": "The \"IP addresses and blacklists\" section shows whether any of your sending IPs is on "
+        "an anti-spam blacklist (DNSBL). Not every hit means the same thing — what matters is which "
+        "specific list, and why.\n\n"
+        "**A real example from this tool:** one of aftermarket.pl's IPs showed up on Spamhaus PBL "
+        "(Policy Block List). PBL does not mean \"this IP sends spam\" — it's a list of addresses that "
+        "the owner/provider itself flagged as \"this shouldn't be a sending server\" (typically dynamic "
+        "or hosting ranges). Checking it further showed this was the exact same EmailLabs range from "
+        "the failing-sources example above — the provider had published it as PBL itself, because part "
+        "of its pool isn't meant for direct sending. This wasn't a signal of \"we're spammers\", just a "
+        "consequence of using a range the provider itself had marked as \"not for sending\".\n\n"
+        "**What to do:** check the list name in the Blacklists column. Spamhaus ZEN/SBL/XBL, Barracuda, "
+        "SpamCop — take these seriously, major receivers actually consult them. UCEProtect level 2/3 "
+        "or PBL — usually says something about the whole hosting range or the provider's own policy, "
+        "not specifically your reputation; check the list's own site (e.g. spamhaus.org/lookup) before "
+        "changing anything.",
+    },
+
+    "use_cases.forwarding_vs_failure.related": {
+        "pl": "Dotyczy: wykresu \"Wolumen\" i tabeli \"Wg dostawcy\" na stronie domeny",
+        "en": "Relates to: the volume chart and the \"By provider\" table on the domain page",
+    },
+    "use_cases.forwarding_vs_failure.title": {
+        "pl": "SPF Fail nie zawsze znaczy realny problem",
+        "en": "SPF Fail doesn't always mean a real problem",
+    },
+    "use_cases.forwarding_vs_failure.body": {
+        "pl": "Na wykresie Wolumen (SPF Fail i DKIM Fail jako przerywane linie) łatwo pomylić dwie różne "
+        "rzeczy: wiadomość, która faktycznie nie przeszła uwierzytelnienia (realne ryzyko), i wiadomość "
+        "przekierowaną dalej przez kogoś innego — np. listę mailingową albo regułę auto-forward w "
+        "skrzynce odbiorcy. SPF w takim wypadku prawie zawsze pada, bo wiadomość fizycznie przechodzi "
+        "przez inny serwer, ale to nie jest wina Waszej konfiguracji.\n\n"
+        "Te dwie sytuacje są w tym narzędziu rozdzielone: wiadomość liczy się jako Przekierowana (nie "
+        "Niezaliczona), gdy SPF pada, ale DKIM nadal przechodzi i host odbiorcy wygląda jak "
+        "przekaźnik/forwarder — bo DKIM (podpis w treści wiadomości) przeżywa przekierowanie, podczas "
+        "gdy SPF (sprawdzenie adresu IP) nie. Prawdziwa Niezaliczona to sytuacja, gdy pada i SPF, i "
+        "DKIM naraz.\n\n"
+        "**Co zrobić:** jeśli rośnie Przekierowane, nic złego się nie dzieje z Waszą konfiguracją — to "
+        "po prostu ktoś dalej przekazuje Waszą pocztę. Skup się na Niezaliczone (na wykresie i w "
+        "kolumnie tabeli Wg dostawcy) — to jest realny wskaźnik problemów z autoryzacją.",
+        "en": "On the volume chart (SPF Fail and DKIM Fail as dashed lines), it's easy to conflate two "
+        "different things: a message that genuinely failed authentication (a real risk), and a message "
+        "relayed onward by someone else — a mailing list, or an auto-forward rule in the recipient's "
+        "mailbox. SPF almost always fails in that second case, because the message physically passes "
+        "through another server, but that isn't a problem with your own setup.\n\n"
+        "The two are kept separate in this tool: a message counts as Forwarded (not Failed) when SPF "
+        "fails but DKIM still passes and the recipient's host looks like a relay/forwarder — because "
+        "DKIM (a signature over the message content) survives forwarding while SPF (a check on the "
+        "connecting IP) doesn't. A genuine Failed is when both SPF and DKIM fail together.\n\n"
+        "**What to do:** if Forwarded is climbing, nothing is actually wrong with your setup — someone "
+        "is simply relaying your mail onward. Focus on Failed (on the chart, and the column in the "
+        "By-provider table) — that's the real authentication-problem indicator.",
+    },
+
+    "use_cases.single_vs_recurring.related": {
+        "pl": "Dotyczy: kolorów i treści flag w sekcji \"Co wymaga uwagi\"",
+        "en": "Relates to: flag colors and wording in \"What needs attention\"",
+    },
+    "use_cases.single_vs_recurring.title": {
+        "pl": "Jedno odrzucenie to nie to samo co dziesięć",
+        "en": "One rejection isn't the same as ten",
+    },
+    "use_cases.single_vs_recurring.body": {
+        "pl": "Nie każdy czerwony albo żółty alert w sekcji Co wymaga uwagi zasługuje na tę samą "
+        "reakcję. Kolor i treść zależą między innymi od tego, ile razy i u jakiego dostawcy coś się "
+        "powtórzyło.\n\n"
+        "**Przykład z tego narzędzia:** pojedyncze odrzucenie u Google z kodem 5.7.1 pokazuje się jako "
+        "żółte Ostrzeżenie z radą \"nie musisz jeszcze wstrzymywać wysyłki, obserwuj czy się powtórzy\". "
+        "Dopiero dwa lub więcej odrzuceń u tego samego dużego dostawcy (Google, Microsoft, Yahoo i "
+        "podobne) zamienia się w czerwone Krytyczne z konkretną radą o wstrzymaniu wysyłki — bo to już "
+        "wygląda na powtarzalny, realny problem z reputacją, nie jednorazowy incydent. Odrzucenie u "
+        "małego, nierozpoznanego dostawcy zostaje żółte niezależnie od liczby powtórzeń — to zwykle "
+        "lokalna polityka jednego odbiorcy, nie sygnał o reputacji całej domeny.\n\n"
+        "**Co zrobić:** czytaj nie tylko kolor, ale i treść pod flagą — każda ma sekcję Co zrobić "
+        "dopasowaną do konkretnej sytuacji (dostawca, liczba wystąpień, czy to duży czy niszowy "
+        "odbiorca). Kolor sam w sobie to skrót, nie cała odpowiedź.",
+        "en": "Not every red or yellow alert in \"What needs attention\" deserves the same reaction. "
+        "The color and wording depend partly on how many times, and at which provider, something "
+        "recurred.\n\n"
+        "**A real example from this tool:** a single rejection at Google with code 5.7.1 shows up as a "
+        "yellow Warning with the advice \"no need to pause sending yet, watch for a repeat\". Only two "
+        "or more rejections at the same major provider (Google, Microsoft, Yahoo and similar) turn into "
+        "a red Critical with concrete pause-sending advice — because that now looks like a recurring, "
+        "real reputation problem, not a one-off. A rejection at a small, unrecognized provider stays "
+        "yellow regardless of how many times it recurs — that's usually one recipient's local policy, "
+        "not a signal about the whole domain's reputation.\n\n"
+        "**What to do:** read the wording under the flag, not just the color — each one has a \"what to "
+        "do\" section tailored to the specific situation (provider, occurrence count, major vs. niche "
+        "receiver). The color alone is a shortcut, not the full answer.",
+    },
+
+    "use_cases.spf_lookup_limit.related": {
+        "pl": "Dotyczy: sekcji \"Rekordy DNS\" na stronie domeny",
+        "en": "Relates to: the \"DNS records\" section on the domain page",
+    },
+    "use_cases.spf_lookup_limit.title": {
+        "pl": "Rekord SPF ma twardy limit 10 zapytań DNS",
+        "en": "An SPF record has a hard 10-lookup DNS limit",
+    },
+    "use_cases.spf_lookup_limit.body": {
+        "pl": "W sekcji Rekordy DNS obok SPF widać licznik w stylu \"7/10 zapytań\". To nie jest "
+        "sugestia — to twardy limit protokołu SPF: każde include:, a, mx, exists w rekordzie kosztuje "
+        "jedno zapytanie DNS, a po przekroczeniu 10 wielu odbiorców przestaje w ogóle sprawdzać SPF i "
+        "traktuje go jako błąd, co wygląda dokładnie tak samo źle jak brak SPF w ogóle.\n\n"
+        "Domeny z wieloma dostawcami naraz (własna skrzynka, ESP do cold mailingu, narzędzie "
+        "marketingowe) zbliżają się do tego limitu najszybciej — każdy dodany include: to zwykle 1-3 "
+        "zapytania w zależności od tego, ile własnych include'ów ma ten dostawca w środku.\n\n"
+        "**Co zrobić:** jeśli licznik świeci się na żółto albo czerwono, sprawdź listę include'ów obok "
+        "w tej samej sekcji i usuń te, których dostawcy już nie używacie — to najczęstsza przyczyna. "
+        "Jeśli wszystkie są faktycznie aktywne, rozważcie spłaszczenie części rekordu (zamiana include: "
+        "na bezpośrednie ip4:) albo ograniczenie liczby dostawców wysyłkowych na tej domenie.",
+        "en": "In the DNS records section, next to SPF there's a counter like \"7/10 lookups\". This "
+        "isn't a suggestion — it's a hard limit of the SPF protocol: every include:, a, mx, exists in "
+        "the record costs one DNS lookup, and past 10 many receivers stop evaluating SPF altogether "
+        "and treat it as an error, which looks exactly as bad as having no SPF at all.\n\n"
+        "Domains juggling several providers at once (an inbox, a cold-outreach ESP, a marketing tool) "
+        "approach this limit fastest — each added include: is typically 1-3 lookups depending on how "
+        "many includes that provider has nested inside its own record.\n\n"
+        "**What to do:** if the counter is yellow or red, check the include list shown right next to "
+        "it and remove any for providers you no longer actually use — that's the most common cause. If "
+        "every one is genuinely still active, consider flattening part of the record (swapping an "
+        "include: for direct ip4: entries) or trimming the number of sending providers on this domain.",
+    },
+
+    "use_cases.daily_triage.related": {
+        "pl": "Dotyczy: strony głównej (Przegląd)",
+        "en": "Relates to: the home page (Overview)",
+    },
+    "use_cases.daily_triage.title": {
+        "pl": "Jak sprawdzać wszystkie domeny w 2 minuty dziennie",
+        "en": "How to check every domain in 2 minutes a day",
+    },
+    "use_cases.daily_triage.body": {
+        "pl": "Strona główna sortuje domeny automatycznie od najpilniejszej — nie trzeba przeglądać "
+        "wszystkich po kolei, żeby wiedzieć, gdzie jest problem.\n\n"
+        "**Szybki, powtarzalny proces:** wejdź na Przegląd i spójrz tylko na domeny z czerwonym albo "
+        "żółtym znacznikiem u góry listy — reszta jest zdrowa i można ją pominąć. W domenie z "
+        "problemem spójrz najpierw na sekcję Co wymaga uwagi, posortowaną od najpoważniejszego "
+        "problemu. Użyj przycisku Analizuj z AI, jeśli chcesz szybkie podsumowanie w kilku zdaniach "
+        "zamiast czytać każdą flagę osobno.\n\n"
+        "**Co zrobić:** ustawcie to jako codzienny nawyk zamiast reagować dopiero na zgłoszenie od "
+        "klienta czy zespołu — większość problemów (blokady, spadek zgodności, wpis na blackliście) "
+        "widać w tym narzędziu na długo zanim ktokolwiek zauważy je po stronie samej wysyłki.",
+        "en": "The home page sorts domains automatically from most urgent — there's no need to page "
+        "through all of them in order to know where a problem is.\n\n"
+        "**A quick, repeatable routine:** open Overview and look only at domains with a red or yellow "
+        "marker near the top of the list — everything else is healthy and can be skipped. On a domain "
+        "with a problem, look first at \"What needs attention\", already sorted from most serious. Use "
+        "the Analyze with AI button when you want a quick few-sentence summary instead of reading every "
+        "flag individually.\n\n"
+        "**What to do:** make this a daily habit instead of only reacting once a client or teammate "
+        "reports something — most problems (blocks, a compliance drop, a blacklist hit) show up here "
+        "long before anyone notices them on the sending side.",
+    },
 }
 
 

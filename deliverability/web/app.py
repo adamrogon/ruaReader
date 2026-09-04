@@ -92,6 +92,31 @@ def _bold_markers(text: str) -> "Any":
 templates.env.filters["bold_markers"] = _bold_markers
 
 
+def _use_case_body_html(text: str) -> "Any":
+    """Like ``_bold_markers``, but for a use case's longer, N-paragraph body.
+
+    A use case is always context/example paragraphs followed by one final
+    "what to do" paragraph — same shape as a flag message, just with more
+    lead-in. Reuses the exact same ``.flag-desc``/``.flag-action`` CSS (and
+    the 💡 callout) so the "what to do" line reads with the same visual
+    weight it already has on the domain page, instead of blending into the
+    surrounding narrative.
+    """
+    import re
+
+    from markupsafe import Markup, escape
+
+    result = str(escape(text))
+    result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
+    parts = [p.strip() for p in re.split(r"\n{2,}", result) if p.strip()]
+    if not parts:
+        return Markup("")
+    *lead_paragraphs, action = parts
+    html = "".join(f'<p class="flag-desc">{p}</p>' for p in lead_paragraphs)
+    html += f'<p class="flag-action">{action}</p>'
+    return Markup(html)
+
+
 def _markdown_to_html(text: str) -> str:
     """Turn **bold** and blank-line-separated paragraphs into HTML.
 
@@ -115,6 +140,51 @@ def _markdown_to_html(text: str) -> str:
     result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
     paragraphs = [p.strip() for p in re.split(r"\n{2,}", result) if p.strip()]
     return "".join(f"<p>{p}</p>" for p in paragraphs) or f"<p>{result}</p>"
+
+
+# Content for the "Use cases" page: for each major chart/table on a domain
+# page, a worked example of "what does this tell us, what do we do about it"
+# — every one is a real investigation done while building this tool, not a
+# hypothetical. Order matters: the failing-sources one leads because it's
+# the fullest end-to-end example (spot it -> identify it -> fix it -> see
+# compliance move).
+USE_CASES: List[Dict[str, str]] = [
+    {
+        "related_key": "use_cases.failing_sources.related",
+        "title_key": "use_cases.failing_sources.title",
+        "body_key": "use_cases.failing_sources.body",
+    },
+    {
+        "related_key": "use_cases.sender_block_reading.related",
+        "title_key": "use_cases.sender_block_reading.title",
+        "body_key": "use_cases.sender_block_reading.body",
+    },
+    {
+        "related_key": "use_cases.single_vs_recurring.related",
+        "title_key": "use_cases.single_vs_recurring.title",
+        "body_key": "use_cases.single_vs_recurring.body",
+    },
+    {
+        "related_key": "use_cases.blacklist_context.related",
+        "title_key": "use_cases.blacklist_context.title",
+        "body_key": "use_cases.blacklist_context.body",
+    },
+    {
+        "related_key": "use_cases.forwarding_vs_failure.related",
+        "title_key": "use_cases.forwarding_vs_failure.title",
+        "body_key": "use_cases.forwarding_vs_failure.body",
+    },
+    {
+        "related_key": "use_cases.spf_lookup_limit.related",
+        "title_key": "use_cases.spf_lookup_limit.title",
+        "body_key": "use_cases.spf_lookup_limit.body",
+    },
+    {
+        "related_key": "use_cases.daily_triage.related",
+        "title_key": "use_cases.daily_triage.title",
+        "body_key": "use_cases.daily_triage.body",
+    },
+]
 
 
 def _static_version() -> str:
@@ -923,6 +993,23 @@ def _settings_context(
         "page": "settings",
         "bulk_results": bulk_results,
     }
+
+
+@app.get("/use-cases")
+def use_cases_page(request: Request):
+    """Onboarding page: what each chart/table on a domain page tells you and
+    what to do about it, illustrated with real cases worked through in this
+    tool. Static content (see USE_CASES above) — no data fetching."""
+    lang = _resolve_request_lang(request)
+    use_cases = [
+        {
+            "related": translate(item["related_key"], lang),
+            "title": translate(item["title_key"], lang),
+            "body_html": _use_case_body_html(translate(item["body_key"], lang)),
+        }
+        for item in USE_CASES
+    ]
+    return _render(request, "use_cases.html", lang, {"page": "use_cases", "use_cases": use_cases})
 
 
 @app.get("/settings")
