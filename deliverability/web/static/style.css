@@ -585,6 +585,8 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
 .bounce-cat-tab.sev-critical .bounce-cat-count { color: var(--critical-text); }
 .bounce-cat-tab.sev-warning .bounce-cat-count { color: var(--warning-text); }
 .bounce-cat-tab .bounce-cat-pct { font-size: 12px; color: var(--text-muted); }
+.bounce-cat-tab .bounce-cat-hint { font-size: 10.5px; color: var(--lh-orange); margin-top: 4px; }
+.bounce-cat-tab.is-active .bounce-cat-hint { display: none; }
 
 .bounce-cat-panels { margin-top: 10px; }
 .bounce-cat-panel { display: none; }

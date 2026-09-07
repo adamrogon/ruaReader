@@ -230,6 +230,7 @@
         <span class="bounce-cat-label">{{ t(bounce_class_label[group.bounce_class]) }}</span>
         <span class="bounce-cat-count">{{ group.count }}</span>
         <span class="bounce-cat-pct">{{ "%.0f"|format(group.pct) }}%</span>
+        <span class="bounce-cat-hint">{{ t('bounce_summary.click_hint') }}</span>
       </button>
     {% endfor %}
   </div>
@@ -554,14 +555,16 @@ const LEGEND_HINTS = {
 })();
 
 // Bounce summary tabs: one shared detail panel below the row of category
-// tiles, swapped by data-cat. Plain class toggling, no framework.
+// tiles, swapped by data-cat. Clicking the already-active tile closes it
+// (no tile active, panel hidden) instead of just re-selecting itself.
 (function () {
   const tabs = document.querySelectorAll('.bounce-cat-tab');
   const panels = document.querySelectorAll('.bounce-cat-panel');
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
-      panels.forEach((p) => p.classList.toggle('is-active', p.dataset.cat === tab.dataset.cat));
+      const closing = tab.classList.contains('is-active');
+      tabs.forEach((t) => t.classList.toggle('is-active', !closing && t === tab));
+      panels.forEach((p) => p.classList.toggle('is-active', !closing && p.dataset.cat === tab.dataset.cat));
     });
   });
 })();
