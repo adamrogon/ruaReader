@@ -223,6 +223,24 @@ const L = {
   dkimFail: {{ t('table.dkim_fail') | tojson }},
 };
 
+// Legend label -> explanation, shown on hover (see legendHintHandlers() in
+// base.html) — same hint keys the domain page's own volume chart uses, plus
+// one set for the bounce-class chart's own four categories.
+const VOLUME_LEGEND_HINTS = {
+  [L.passed]: {{ t('chart.legend.passed_hint') | tojson }},
+  [L.forwarded]: {{ t('chart.legend.forwarded_hint') | tojson }},
+  [L.failed]: {{ t('chart.legend.failed_hint') | tojson }},
+  [L.compliance]: {{ t('chart.legend.compliance_hint') | tojson }},
+  [L.spfFail]: {{ t('table.spf_fail_hint') | tojson }},
+  [L.dkimFail]: {{ t('table.dkim_fail_hint') | tojson }},
+};
+const BOUNCE_LEGEND_HINTS = {
+  [L.senderBlock]: {{ t('chart.legend.sender_block_hint') | tojson }},
+  [L.hard]: {{ t('chart.legend.hard_hint') | tojson }},
+  [L.soft]: {{ t('chart.legend.soft_hint') | tojson }},
+  [L.unparsed]: {{ t('chart.legend.unparsed_hint') | tojson }},
+};
+
 let volumeChart = null;
 let bounceChart = null;
 
@@ -276,7 +294,7 @@ function loadVolumeChart(domains) {
       },
       options: {
         interaction: { mode: 'index', intersect: false },
-        plugins: { tooltip: TOOLTIP },
+        plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(VOLUME_LEGEND_HINTS) },
         onClick: goToFleetDay,
         onHover: (evt, elements, chart) => { chart.canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
         scales: {
@@ -314,7 +332,7 @@ function loadBounceChart(domains) {
       },
       options: {
         interaction: { mode: 'index', intersect: false },
-        plugins: { tooltip: TOOLTIP },
+        plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(BOUNCE_LEGEND_HINTS) },
         scales: {
           x: { stacked: true, grid: { display: false } },
           y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: L.axisBounces } },

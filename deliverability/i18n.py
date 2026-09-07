@@ -149,9 +149,25 @@ MESSAGES: dict = {
         "en": "Passed ÷ (passed + failed). Forwarded messages are excluded.",
     },
     "chart.legend.sender_block": {"pl": "Blokada nadawcy", "en": "Sender block"},
+    "chart.legend.sender_block_hint": {
+        "pl": "Odbiorca odrzucił całą domenę/IP, nie jeden adres — najpoważniejszy typ odbicia.",
+        "en": "The receiver rejected the whole domain/IP, not one address — the most serious bounce type.",
+    },
     "chart.legend.hard": {"pl": "Twarde", "en": "Hard"},
+    "chart.legend.hard_hint": {
+        "pl": "Trwały błąd konkretnego adresu (np. nie istnieje) — usuń go z listy.",
+        "en": "A permanent failure of one specific address (e.g. it doesn't exist) — remove it from the list.",
+    },
     "chart.legend.soft": {"pl": "Miękkie", "en": "Soft"},
+    "chart.legend.soft_hint": {
+        "pl": "Tymczasowy problem (pełna skrzynka, chwilowa niedostępność) — może się jeszcze udać.",
+        "en": "A temporary issue (full mailbox, brief unavailability) — may still get through later.",
+    },
     "chart.legend.unparsed": {"pl": "Nieprzetworzone", "en": "Unparsed"},
+    "chart.legend.unparsed_hint": {
+        "pl": "Nie udało się rozpoznać kodu odbicia z treści wiadomości.",
+        "en": "The bounce code couldn't be parsed from the message text.",
+    },
     "chart.axis.messages": {"pl": "wiadomości", "en": "messages"},
     "chart.axis.compliance": {"pl": "zgodność %", "en": "compliance %"},
     "chart.axis.bounces": {"pl": "odbicia", "en": "bounces"},
