@@ -198,12 +198,17 @@
   </div>
 </div>
 
-{# --- Consolidated bounce summary: one card per category, expandable ------ #}
+{# --- Consolidated bounce summary: tabs over one shared detail panel ------ #}
 {# Used to be one flat table — a row per (code, class, provider) combo —
-   which read fine at 3 rows and turned into a wall of text at 20. Grouping
-   by bounce_class into a handful of cards (collapsed by default, via plain
-   <details> — no JS needed) gives the same detail on demand instead of all
-   at once. #}
+   which read fine at 3 rows and turned into a wall of text at 20. First
+   attempt was a <details> card per category, but nested inside a CSS grid
+   that meant: opening one stretched the grid row height, so the OTHER
+   (still closed) cards visibly stretched into empty boxes too; and the
+   opened table stayed squeezed to that one grid column's width, so the
+   Diagnostyka column had nowhere to actually show its text. Tabs avoid
+   both: the tiles are a fixed-height row (not a stretching grid), and the
+   detail table always renders in ONE shared full-width panel below,
+   regardless of which tab is active — plenty of room to read. #}
 {% set bounce_class_label = {
   'sender_block': 'kpi.sender_blocks',
   'hard': 'kpi.hard_bounces',
@@ -218,16 +223,20 @@
 } %}
 <h2>{{ t('section.bounce_summary') }} <span class="hint">{{ t('section.bounce_summary_hint') }}</span></h2>
 {% if bounce_groups %}
-  <div class="bounce-cat-grid">
+  <div class="bounce-cat-tabs">
     {% for group in bounce_groups %}
       {% set sev = bounce_class_severity[group.bounce_class] %}
-      <details class="bounce-cat-card sev-{{ sev }}">
-        <summary>
-          <span class="bounce-cat-label">{{ t(bounce_class_label[group.bounce_class]) }}</span>
-          <span class="bounce-cat-count">{{ group.count }}</span>
-          <span class="bounce-cat-pct">{{ "%.0f"|format(group.pct) }}%</span>
-          <span class="bounce-cat-hint">{{ t('bounce_summary.click_hint') }}</span>
-        </summary>
+      <button type="button" class="bounce-cat-tab sev-{{ sev }} {{ 'is-active' if loop.first }}" data-cat="{{ group.bounce_class }}">
+        <span class="bounce-cat-label">{{ t(bounce_class_label[group.bounce_class]) }}</span>
+        <span class="bounce-cat-count">{{ group.count }}</span>
+        <span class="bounce-cat-pct">{{ "%.0f"|format(group.pct) }}%</span>
+      </button>
+    {% endfor %}
+  </div>
+  <div class="bounce-cat-panels">
+    {% for group in bounce_groups %}
+      {% set sev = bounce_class_severity[group.bounce_class] %}
+      <div class="bounce-cat-panel {{ 'is-active' if loop.first }}" data-cat="{{ group.bounce_class }}">
         <div class="table-wrap">
           <table>
             <thead>
@@ -255,7 +264,7 @@
             </tbody>
           </table>
         </div>
-      </details>
+      </div>
     {% endfor %}
   </div>
 {% else %}
@@ -541,6 +550,19 @@ const LEGEND_HINTS = {
     } finally {
       btn.disabled = false;
     }
+  });
+})();
+
+// Bounce summary tabs: one shared detail panel below the row of category
+// tiles, swapped by data-cat. Plain class toggling, no framework.
+(function () {
+  const tabs = document.querySelectorAll('.bounce-cat-tab');
+  const panels = document.querySelectorAll('.bounce-cat-panel');
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
+      panels.forEach((p) => p.classList.toggle('is-active', p.dataset.cat === tab.dataset.cat));
+    });
   });
 })();
 

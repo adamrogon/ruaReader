@@ -554,37 +554,41 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
   word-break: break-word;
 }
 
-/* --- Bounce summary: one card per category, expandable ------------------- */
+/* --- Bounce summary: tabs over one shared, full-width detail panel ------- */
+/* Deliberately NOT a grid of <details> cards — that stretched every card in
+   a row to match whichever one was open (empty space in the closed ones)
+   and squeezed the open table into one narrow grid column. A row of
+   fixed-height tab buttons plus one shared panel below sidesteps both:
+   the tiles never resize, and the table always gets the full section
+   width no matter which category is selected. */
 
-.bounce-cat-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px; margin-top: 4px;
-}
-.bounce-cat-card {
+.bounce-cat-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.bounce-cat-tab {
+  flex: 1 1 150px; min-width: 130px; cursor: pointer; text-align: left;
+  font: inherit; color: inherit;
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); box-shadow: var(--shadow-card);
-  overflow: hidden;
+  padding: 11px 14px; display: flex; flex-direction: column; gap: 2px;
 }
-.bounce-cat-card.sev-critical { border-left: 3px solid var(--critical); }
-.bounce-cat-card.sev-warning { border-left: 3px solid var(--warning); }
-.bounce-cat-card.sev-neutral { border-left: 3px solid var(--text-dim); }
-.bounce-cat-card > summary {
-  cursor: pointer; list-style: none; padding: 14px 16px;
-  display: flex; flex-direction: column; gap: 2px;
+.bounce-cat-tab.sev-critical { border-left: 3px solid var(--critical); }
+.bounce-cat-tab.sev-warning { border-left: 3px solid var(--warning); }
+.bounce-cat-tab.sev-neutral { border-left: 3px solid var(--text-dim); }
+.bounce-cat-tab.is-active {
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--border-strong) inset, var(--shadow-card);
 }
-.bounce-cat-card > summary::-webkit-details-marker { display: none; }
-.bounce-cat-card[open] > summary { border-bottom: 1px solid var(--border); }
-.bounce-cat-label {
+.bounce-cat-tab .bounce-cat-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--text-dim);
 }
-.bounce-cat-count { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.bounce-cat-card.sev-critical .bounce-cat-count { color: var(--critical-text); }
-.bounce-cat-card.sev-warning .bounce-cat-count { color: var(--warning-text); }
-.bounce-cat-pct { font-size: 12px; color: var(--text-muted); }
-.bounce-cat-hint { font-size: 10.5px; color: var(--lh-orange); margin-top: 3px; }
-.bounce-cat-card[open] .bounce-cat-hint { display: none; }
-.bounce-cat-card .table-wrap { margin: 0; border: none; border-radius: 0; }
+.bounce-cat-tab .bounce-cat-count { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bounce-cat-tab.sev-critical .bounce-cat-count { color: var(--critical-text); }
+.bounce-cat-tab.sev-warning .bounce-cat-count { color: var(--warning-text); }
+.bounce-cat-tab .bounce-cat-pct { font-size: 12px; color: var(--text-muted); }
+
+.bounce-cat-panels { margin-top: 10px; }
+.bounce-cat-panel { display: none; }
+.bounce-cat-panel.is-active { display: block; }
 
 .pager {
   display: flex; justify-content: space-between; align-items: center;
