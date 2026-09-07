@@ -142,10 +142,28 @@
     // plugins.legend — they show/hide the one shared #legend-tip div,
     // positioned next to the cursor.
     const legendTip = document.getElementById('legend-tip');
+    // Legend text is drawn on canvas — there's no way to give just the
+    // "ⓘ" a different color the way .th-hint does in real DOM, but
+    // appending it to the label text itself (via generateLabels) is enough
+    // to signal "there's an explanation here" before anyone hovers, which
+    // a dotted underline on a real <th> already turned out too subtle for.
+    const HINT_MARK = ' ⓘ';
+    function stripHintMark(text) {
+      return text.endsWith(HINT_MARK) ? text.slice(0, -HINT_MARK.length) : text;
+    }
     function legendHintHandlers(hints) {
       return {
+        labels: {
+          generateLabels(chart) {
+            const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+            items.forEach((item) => {
+              if (hints[item.text]) item.text += HINT_MARK;
+            });
+            return items;
+          },
+        },
         onHover(evt, legendItem, legend) {
-          const text = hints[legendItem.text];
+          const text = hints[stripHintMark(legendItem.text)];
           legend.chart.canvas.style.cursor = text ? 'help' : 'default';
           if (!text) { legendTip.style.display = 'none'; return; }
           const rect = legend.chart.canvas.getBoundingClientRect();

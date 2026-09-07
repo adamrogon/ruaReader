@@ -546,8 +546,21 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
   background: #232425; color: #e2e2e2;
 }
 
-.th-hint { cursor: help; text-decoration: underline dotted var(--text-dim); text-underline-offset: 3px; }
-.badge.th-hint { text-decoration: none; } /* dotted underline reads oddly on a pill badge; keep just the cursor */
+/* A dotted underline alone turned out too subtle — nobody thought to hover
+   it. A small "ⓘ" appended after the text is a much more legible "there's
+   an explanation here" signal, and it works the same way on a plain header
+   as on a pill-shaped badge, so one rule covers both instead of the badge
+   needing its own override. */
+.th-hint { cursor: help; }
+.th-hint::after {
+  content: "ⓘ";
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--info);
+  opacity: 0.85;
+  vertical-align: super;
+}
 
 .ip-hint {
   margin-top: 3px; font-size: 11.5px; color: var(--text-dim);
