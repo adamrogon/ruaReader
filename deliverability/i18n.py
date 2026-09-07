@@ -226,9 +226,15 @@ MESSAGES: dict = {
         "en": "Bounce summary",
     },
     "section.bounce_summary_hint": {
-        "pl": "jedna pozycja na każdą kombinację kodu, klasy i dostawcy — od najczęstszych",
-        "en": "one row per code+class+provider combination — most frequent first",
+        "pl": "pogrupowane wg kategorii — kliknij kartę, by zobaczyć dokładne kody i dostawców",
+        "en": "grouped by category — click a card to see the exact codes and providers",
     },
+    "bounce_summary.click_hint": {
+        "pl": "kliknij, by rozwinąć",
+        "en": "click to expand",
+    },
+    "kpi.soft_bounces": {"pl": "Miękkie odbicia", "en": "Soft bounces"},
+    "kpi.unparsed_bounces": {"pl": "Nieprzetworzone odbicia", "en": "Unparsed bounces"},
     "table.latest": {"pl": "Ostatnio", "en": "Latest"},
     "pager.showing": {
         "pl": "Strona {page} z {total_pages} · {total} wpisów łącznie",

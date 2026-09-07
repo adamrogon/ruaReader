@@ -198,41 +198,69 @@
   </div>
 </div>
 
-{# --- Consolidated bounce summary: one row per (code, class, provider) --- #}
-{# Replaces the old separate "Sender blocks" and "Bounce codes" panels — same
-   information, in one table sorted by how often each signature has arrived. #}
+{# --- Consolidated bounce summary: one card per category, expandable ------ #}
+{# Used to be one flat table — a row per (code, class, provider) combo —
+   which read fine at 3 rows and turned into a wall of text at 20. Grouping
+   by bounce_class into a handful of cards (collapsed by default, via plain
+   <details> — no JS needed) gives the same detail on demand instead of all
+   at once. #}
+{% set bounce_class_label = {
+  'sender_block': 'kpi.sender_blocks',
+  'hard': 'kpi.hard_bounces',
+  'soft': 'kpi.soft_bounces',
+  'unknown': 'kpi.unparsed_bounces',
+} %}
+{% set bounce_class_severity = {
+  'sender_block': 'critical',
+  'hard': 'warning',
+  'soft': 'neutral',
+  'unknown': 'neutral',
+} %}
 <h2>{{ t('section.bounce_summary') }} <span class="hint">{{ t('section.bounce_summary_hint') }}</span></h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left">{{ t('table.latest') }}</th>
-        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.code_hint') }}">{{ t('table.code') }}</th>
-        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.class_hint') }}">{{ t('table.class') }}</th>
-        <th style="text-align:left">{{ t('table.provider') }}</th>
-        <th style="text-align:left" class="th-hint" data-hint="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
-        <th>{{ t('table.count') }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in bounce_summary %}
-        <tr>
-          <td style="text-align:left" class="mono">{{ row.latest.strftime('%Y-%m-%d %H:%M') if row.latest else '—' }}</td>
-          <td style="text-align:left"><span class="badge {{ 'critical' if row.bounce_class == 'sender_block' else ('warning' if row.bounce_class == 'hard' else 'neutral') }}">{{ row.status_code or t('table.unparsed') }}</span></td>
-          <td style="text-align:left">{{ t('bounce_class.' ~ row.bounce_class) }}</td>
-          <td style="text-align:left">{{ row.esp or '—' }}</td>
-          <td style="text-align:left" class="bounce-diag">
-            <div class="mono">{{ row.sample_diagnostic or '—' }}</div>
-            {% if row.code_help %}<div class="bounce-help">{{ row.code_help }}</div>{% endif %}
-          </td>
-          <td><strong>{{ row.count }}</strong></td>
-        </tr>
-      {% else %}
-        <tr><td colspan="6" class="empty">{{ t('empty.no_bounces') }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% if bounce_groups %}
+  <div class="bounce-cat-grid">
+    {% for group in bounce_groups %}
+      {% set sev = bounce_class_severity[group.bounce_class] %}
+      <details class="bounce-cat-card sev-{{ sev }}">
+        <summary>
+          <span class="bounce-cat-label">{{ t(bounce_class_label[group.bounce_class]) }}</span>
+          <span class="bounce-cat-count">{{ group.count }}</span>
+          <span class="bounce-cat-pct">{{ "%.0f"|format(group.pct) }}%</span>
+          <span class="bounce-cat-hint">{{ t('bounce_summary.click_hint') }}</span>
+        </summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">{{ t('table.latest') }}</th>
+                <th style="text-align:left" class="th-hint" data-hint="{{ t('table.code_hint') }}">{{ t('table.code') }}</th>
+                <th style="text-align:left">{{ t('table.provider') }}</th>
+                <th style="text-align:left" class="th-hint" data-hint="{{ t('table.diagnostic_hint') }}">{{ t('table.diagnostic') }}</th>
+                <th>{{ t('table.count') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in group.rows %}
+                <tr>
+                  <td style="text-align:left" class="mono">{{ row.latest.strftime('%Y-%m-%d %H:%M') if row.latest else '—' }}</td>
+                  <td style="text-align:left"><span class="badge {{ sev }}">{{ row.status_code or t('table.unparsed') }}</span></td>
+                  <td style="text-align:left">{{ row.esp or '—' }}</td>
+                  <td style="text-align:left" class="bounce-diag">
+                    <div class="mono">{{ row.sample_diagnostic or '—' }}</div>
+                    {% if row.code_help %}<div class="bounce-help">{{ row.code_help }}</div>{% endif %}
+                  </td>
+                  <td><strong>{{ row.count }}</strong></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">{{ t('empty.no_bounces') }}</div>
+{% endif %}
 
 {# --- DNS state ----------------------------------------------------------- #}
 <h2>{{ t('section.dns_records') }} <span class="hint">{% if dns and dns.checked_at %}{{ t('section.dns_checked_at', when=dns.checked_at.strftime('%Y-%m-%d %H:%M')) }}{% else %}{{ t('empty.dns_not_checked') }}{% endif %}</span></h2>

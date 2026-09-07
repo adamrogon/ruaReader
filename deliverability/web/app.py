@@ -426,6 +426,42 @@ def _ip_hint(ptr_hostname: Optional[str]) -> Optional[str]:
     return f"{ptr_hostname} ({label})"
 
 
+# Worst-first — matches the same severity ordering used everywhere else
+# (sender_block outranks hard, hard outranks soft, unknown last since it's
+# not yet classified at all).
+_BOUNCE_CLASS_ORDER = ["sender_block", "hard", "soft", "unknown"]
+
+
+def _group_bounce_summary(bounce_summary: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Fold the flat per-(code, class, provider) rows into one card per class.
+
+    The flat table was every code/provider/diagnostic combination in one
+    long list — readable for 3 rows, not for 20. Grouping by bounce_class
+    first (a handful of cards, each collapsed by default) gives the same
+    detail on demand without the wall of text up front.
+    """
+    total = sum(row["count"] for row in bounce_summary)
+    by_class: Dict[str, List[Dict[str, Any]]] = {}
+    for row in bounce_summary:
+        by_class.setdefault(row["bounce_class"], []).append(row)
+
+    groups = []
+    for cls in _BOUNCE_CLASS_ORDER:
+        rows = by_class.get(cls)
+        if not rows:
+            continue
+        count = sum(r["count"] for r in rows)
+        groups.append(
+            {
+                "bounce_class": cls,
+                "count": count,
+                "pct": (count / total * 100) if total else 0,
+                "rows": sorted(rows, key=lambda r: -r["count"]),
+            }
+        )
+    return groups
+
+
 def _trim_diagnostic(text: Optional[str], max_len: int = 250) -> str:
     """Extract the meaningful part of a bounce diagnostic.
 
@@ -779,6 +815,7 @@ def domain_detail(
         )
         for row in bounce_summary_rows
     ]
+    bounce_groups = _group_bounce_summary(bounce_summary)
 
     # Paginated raw log — 10 per page keeps the domain page short even after
     # weeks of ingestion, and pager arithmetic runs server-side against the
@@ -810,6 +847,7 @@ def domain_detail(
             "dns": dns_row,
             "blacklist_rows": blacklist_rows,
             "bounce_summary": bounce_summary,
+            "bounce_groups": bounce_groups,
             "recent_bounces": recent_bounces,
             "bounce_pagination": {
                 "current": current_page,

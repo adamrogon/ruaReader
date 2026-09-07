@@ -554,6 +554,38 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
   word-break: break-word;
 }
 
+/* --- Bounce summary: one card per category, expandable ------------------- */
+
+.bounce-cat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px; margin-top: 4px;
+}
+.bounce-cat-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.bounce-cat-card.sev-critical { border-left: 3px solid var(--critical); }
+.bounce-cat-card.sev-warning { border-left: 3px solid var(--warning); }
+.bounce-cat-card.sev-neutral { border-left: 3px solid var(--text-dim); }
+.bounce-cat-card > summary {
+  cursor: pointer; list-style: none; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.bounce-cat-card > summary::-webkit-details-marker { display: none; }
+.bounce-cat-card[open] > summary { border-bottom: 1px solid var(--border); }
+.bounce-cat-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--text-dim);
+}
+.bounce-cat-count { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bounce-cat-card.sev-critical .bounce-cat-count { color: var(--critical-text); }
+.bounce-cat-card.sev-warning .bounce-cat-count { color: var(--warning-text); }
+.bounce-cat-pct { font-size: 12px; color: var(--text-muted); }
+.bounce-cat-hint { font-size: 10.5px; color: var(--lh-orange); margin-top: 3px; }
+.bounce-cat-card[open] .bounce-cat-hint { display: none; }
+.bounce-cat-card .table-wrap { margin: 0; border: none; border-radius: 0; }
+
 .pager {
   display: flex; justify-content: space-between; align-items: center;
   gap: 12px; margin-top: 10px; padding: 6px 4px;
