@@ -98,7 +98,11 @@
     Chart.defaults.plugins.legend.labels.boxWidth = 9;
     Chart.defaults.plugins.legend.labels.boxHeight = 9;
     Chart.defaults.plugins.legend.labels.usePointStyle = true;
-    Chart.defaults.plugins.legend.labels.padding = 14;
+    // Tight enough that all 6 items on the volume chart's legend (Passed/
+    // Forwarded/Failed/Compliance/SPF Fail/DKIM Fail, each now carrying the
+    // "ⓘ" hint marker too) fit on one line at a normal desktop width instead
+    // of wrapping to an orphaned single item on its own row.
+    Chart.defaults.plugins.legend.labels.padding = 9;
     Chart.defaults.maintainAspectRatio = false;
 
     const PALETTE = {
