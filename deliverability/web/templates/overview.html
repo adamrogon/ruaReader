@@ -308,6 +308,7 @@ const L = {
   hard: {{ t('chart.legend.hard') | tojson }},
   soft: {{ t('chart.legend.soft') | tojson }},
   unparsed: {{ t('chart.legend.unparsed') | tojson }},
+  messages: {{ t('kpi.messages') | tojson }},
   axisMessages: {{ t('chart.axis.messages') | tojson }},
   axisCompliance: {{ t('chart.axis.compliance') | tojson }},
   axisBounces: {{ t('chart.axis.bounces') | tojson }},
@@ -327,10 +328,10 @@ const VOLUME_LEGEND_HINTS = {
   [L.dkimFail]: {{ t('table.dkim_fail_hint') | tojson }},
 };
 const BOUNCE_LEGEND_HINTS = {
+  [L.messages]: {{ t('chart.legend.volume_hint') | tojson }},
   [L.senderBlock]: {{ t('chart.legend.sender_block_hint') | tojson }},
   [L.hard]: {{ t('chart.legend.hard_hint') | tojson }},
   [L.soft]: {{ t('chart.legend.soft_hint') | tojson }},
-  [L.unparsed]: {{ t('chart.legend.unparsed_hint') | tojson }},
 };
 
 let volumeChart = null;
@@ -410,31 +411,56 @@ function loadVolumeChart(domains) {
   });
 }
 
+// Daily sent volume (bars) against bounce classes (dashed lines) — the point
+// is comparing scale, e.g. 4 sender blocks against 1,000 sent that day, so
+// the bounce lines get their own axis (y1) instead of sharing the messages
+// axis, where a handful of bounces would flatten into an invisible sliver
+// against hundreds/thousands of messages sent.
 function loadBounceChart(domains) {
   if (domains && domains.length === 0) {
     if (bounceChart) { bounceChart.destroy(); bounceChart = null; }
     return;
   }
   const filter = domains ? `&${domainQuery(domains)}` : '';
-  fetch(`/api/bounces?days=${DAYS}${filter}`).then(r => r.json()).then(d => {
+  Promise.all([
+    fetch(`/api/volume?days=${DAYS}${filter}`).then(r => r.json()),
+    fetch(`/api/bounces?days=${DAYS}${filter}`).then(r => r.json()),
+  ]).then(([vol, b]) => {
     if (bounceChart) bounceChart.destroy();
+    const totalSent = vol.labels.map((_, i) => (vol.passed[i] || 0) + (vol.forwarded[i] || 0) + (vol.failed[i] || 0));
     bounceChart = new Chart(document.getElementById('bounceChart'), {
       type: 'bar',
       data: {
-        labels: d.labels,
+        labels: b.labels,
         datasets: [
-          { label: L.senderBlock, data: d.sender_block, backgroundColor: PALETTE.block, stack: 'b', borderRadius: 2 },
-          { label: L.hard, data: d.hard, backgroundColor: '#b91c1c', stack: 'b', borderRadius: 2 },
-          { label: L.soft, data: d.soft, backgroundColor: PALETTE.soft, stack: 'b', borderRadius: 2 },
-          { label: L.unparsed, data: d.unknown, backgroundColor: PALETTE.unknown, stack: 'b', borderRadius: 2 },
+          { label: L.messages, data: totalSent, backgroundColor: PALETTE.unknown, borderRadius: 2, order: 3 },
+          {
+            label: L.senderBlock, data: b.sender_block, type: 'line', order: 0, yAxisID: 'y1',
+            borderColor: PALETTE.block, backgroundColor: PALETTE.block,
+            borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+            tension: 0.3, borderDash: [6, 3],
+          },
+          {
+            label: L.hard, data: b.hard, type: 'line', order: 0, yAxisID: 'y1',
+            borderColor: '#b91c1c', backgroundColor: '#b91c1c',
+            borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+            tension: 0.3, borderDash: [6, 3],
+          },
+          {
+            label: L.soft, data: b.soft, type: 'line', order: 0, yAxisID: 'y1',
+            borderColor: PALETTE.soft, backgroundColor: PALETTE.soft,
+            borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+            tension: 0.3, borderDash: [6, 3],
+          },
         ],
       },
       options: {
         interaction: { mode: 'index', intersect: false },
         plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(BOUNCE_LEGEND_HINTS) },
         scales: {
-          x: { stacked: true, grid: { display: false } },
-          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: L.axisBounces } },
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: L.axisMessages } },
+          y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: L.axisBounces } },
         },
       },
     });

@@ -117,10 +117,14 @@ MESSAGES: dict = {
         "pl": "Przekierowana poczta pokazana osobno, nie liczy się jako błąd.",
         "en": "Forwarded mail is shown separately, not counted as failure.",
     },
-    "chart.bounces.title": {"pl": "Dzienne odbicia wg klasy", "en": "Daily bounces by class"},
+    "chart.bounces.title": {"pl": "Dzienny wolumen odbić", "en": "Daily bounce volume"},
     "chart.bounces.sub": {
-        "pl": "Blokady nadawcy to najważniejszy sygnał.",
-        "en": "Sender blocks are the signal that matters most.",
+        "pl": "Słupki to wysłane wiadomości, linie to odbicia — łatwo zestawić skalę.",
+        "en": "Bars are messages sent, lines are bounces — easy to compare scale.",
+    },
+    "chart.legend.volume_hint": {
+        "pl": "Łączny dzienny wolumen wysłanych wiadomości (z raportów DMARC) — tło do porównania z odbiciami.",
+        "en": "Total daily messages sent (from DMARC reports) — background to compare against bounces.",
     },
     "chart.legend.passed": {"pl": "Zaliczone", "en": "Passed"},
     "chart.legend.passed_hint": {

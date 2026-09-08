@@ -272,6 +272,13 @@
   <div class="empty">{{ t('empty.no_bounces') }}</div>
 {% endif %}
 
+{# --- Daily bounce volume: sent (bars) against bounce classes (lines) ----- #}
+<div class="card" style="margin-top:14px">
+  <div class="card-title">{{ t('chart.bounces.title') }}</div>
+  <div class="card-sub">{{ t('chart.bounces.sub') }}</div>
+  <div class="chart-box"><canvas id="bounceChart"></canvas></div>
+</div>
+
 {# --- DNS state ----------------------------------------------------------- #}
 <h2>{{ t('section.dns_records') }} <span class="hint">{% if dns and dns.checked_at %}{{ t('section.dns_checked_at', when=dns.checked_at.strftime('%Y-%m-%d %H:%M')) }}{% else %}{{ t('empty.dns_not_checked') }}{% endif %}</span></h2>
 {% if dns %}
@@ -509,6 +516,12 @@ const L = {
   compliance: {{ t('chart.legend.compliance') | tojson }},
   spfFail: {{ t('table.spf_fail') | tojson }},
   dkimFail: {{ t('table.dkim_fail') | tojson }},
+  messages: {{ t('kpi.messages') | tojson }},
+  senderBlock: {{ t('chart.legend.sender_block') | tojson }},
+  hard: {{ t('chart.legend.hard') | tojson }},
+  soft: {{ t('chart.legend.soft') | tojson }},
+  axisMessages: {{ t('chart.axis.messages') | tojson }},
+  axisBounces: {{ t('chart.axis.bounces') | tojson }},
 };
 
 // Legend label -> explanation, shown on hover (see legendHintHandlers() in
@@ -522,6 +535,12 @@ const LEGEND_HINTS = {
   [L.compliance]: {{ t('chart.legend.compliance_hint') | tojson }},
   [L.spfFail]: {{ t('table.spf_fail_hint') | tojson }},
   [L.dkimFail]: {{ t('table.dkim_fail_hint') | tojson }},
+};
+const BOUNCE_LEGEND_HINTS = {
+  [L.messages]: {{ t('chart.legend.volume_hint') | tojson }},
+  [L.senderBlock]: {{ t('chart.legend.sender_block_hint') | tojson }},
+  [L.hard]: {{ t('chart.legend.hard_hint') | tojson }},
+  [L.soft]: {{ t('chart.legend.soft_hint') | tojson }},
 };
 
 // "Analizuj z AI": the summary is grounded entirely in facts computed
@@ -647,6 +666,54 @@ fetch(`/api/esp?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.
       scales: {
         x: { stacked: true, beginAtZero: true },
         y: { stacked: true, grid: { display: false } },
+      },
+    },
+  });
+});
+
+// Daily sent volume (bars) against bounce classes (dashed lines) — the point
+// is comparing scale, e.g. 4 sender blocks against 1,000 sent that day, so
+// the bounce lines get their own axis (y1) instead of sharing the messages
+// axis, where a handful of bounces would flatten into an invisible sliver
+// against hundreds/thousands of messages sent.
+Promise.all([
+  fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()),
+  fetch(`/api/bounces?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()),
+]).then(([vol, b]) => {
+  const totalSent = vol.labels.map((_, i) => (vol.passed[i] || 0) + (vol.forwarded[i] || 0) + (vol.failed[i] || 0));
+  new Chart(document.getElementById('bounceChart'), {
+    type: 'bar',
+    data: {
+      labels: b.labels,
+      datasets: [
+        { label: L.messages, data: totalSent, backgroundColor: PALETTE.unknown, borderRadius: 2, order: 3 },
+        {
+          label: L.senderBlock, data: b.sender_block, type: 'line', order: 0, yAxisID: 'y1',
+          borderColor: PALETTE.block, backgroundColor: PALETTE.block,
+          borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+          tension: 0.3, borderDash: [6, 3],
+        },
+        {
+          label: L.hard, data: b.hard, type: 'line', order: 0, yAxisID: 'y1',
+          borderColor: '#b91c1c', backgroundColor: '#b91c1c',
+          borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+          tension: 0.3, borderDash: [6, 3],
+        },
+        {
+          label: L.soft, data: b.soft, type: 'line', order: 0, yAxisID: 'y1',
+          borderColor: PALETTE.soft, backgroundColor: PALETTE.soft,
+          borderWidth: 3, pointRadius: 3, pointBorderWidth: 1.5, pointBorderColor: '#fff',
+          tension: 0.3, borderDash: [6, 3],
+        },
+      ],
+    },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(BOUNCE_LEGEND_HINTS) },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: L.axisMessages } },
+        y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: L.axisBounces } },
       },
     },
   });
