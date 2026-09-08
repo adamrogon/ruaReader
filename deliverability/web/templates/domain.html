@@ -686,7 +686,7 @@ Promise.all([
     data: {
       labels: b.labels,
       datasets: [
-        { label: L.messages, data: totalSent, backgroundColor: PALETTE.unknown, borderRadius: 2, order: 3 },
+        { label: L.messages, data: totalSent, backgroundColor: PALETTE.forwarded, borderRadius: 2, order: 3 },
         {
           label: L.senderBlock, data: b.sender_block, type: 'line', order: 0, yAxisID: 'y1',
           borderColor: PALETTE.block, backgroundColor: PALETTE.block,
@@ -710,6 +710,8 @@ Promise.all([
     options: {
       interaction: { mode: 'index', intersect: false },
       plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(BOUNCE_LEGEND_HINTS) },
+      onClick: goToDay,
+      onHover: (evt, elements, chart) => { chart.canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
       scales: {
         x: { grid: { display: false } },
         y: { beginAtZero: true, title: { display: true, text: L.axisMessages } },
