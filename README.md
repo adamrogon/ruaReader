@@ -150,6 +150,10 @@ as an explicit stale state rather than silently displaying old numbers.
 
 ```bash
 .venv/bin/python -m uvicorn deliverability.web.app:app --port 8099
+
+# ...or, to also stop any already-running instance first and clear any
+# ingestion run orphaned by that stop (see "Reliability lessons" below):
+./scripts/restart_dashboard.sh [port]
 ```
 
 **Overview** — domains ordered by urgency (never alphabetically), fleet totals, a
@@ -157,11 +161,30 @@ freshness strip per ingestion stream, the per-provider breakdown, and daily
 trend charts.
 
 **Domain page** — every flag with a plain-language explanation, per-provider
-compliance, sender-block detail, bounce codes, current DNS records, and the
-highest-volume failing sources.
+compliance, sender-block detail, current DNS records, and the highest-volume
+failing sources. Two charts (daily volume by outcome, and daily bounce volume
+by class) plot the class-of-interest as dashed lines against total messages
+sent as bars on a separate axis, so a handful of real bounces don't visually
+disappear against hundreds/thousands of sent messages sharing one scale —
+clicking a day on either drills into `/domain/{domain}/day/{date}`. Bounce
+detail ("Podsumowanie odbić") is a small set of category tabs (sender block /
+hard / soft / unparsed) over one shared detail panel, not one long flat table
+— pick a category to see its exact codes, providers, and diagnostic text.
+Every chart legend item and sortable table header that has more to say
+carries a small "ⓘ" and shows an explanation on hover.
+
+Each IP in "Adresy IP i blacklisty" also shows its reverse-DNS (PTR) hostname
+underneath, captured once at DNSBL-check time (never live on page load) —
+often enough on its own to recognize which provider/host an unfamiliar IP
+belongs to.
 
 JSON endpoints, if you want the data elsewhere: `/api/volume`, `/api/bounces`,
 `/api/esp`, `/api/health`.
+
+**`/use-cases`** — a static onboarding page: for each major chart/table above,
+a real worked example of what it showed once and what changed after acting
+on it (not a generic feature tour). Useful to point a new team member at
+before they touch the dashboard for the first time.
 
 **Settings** — add, edit, enable/disable, and remove domains and mailboxes.
 Passwords typed here are encrypted with `SECRET_KEY` before they touch the
@@ -174,13 +197,16 @@ demand, on a background thread, and reloads when they finish. It refuses to
 start a stream that is already running, so it is safe to press twice or to
 press while cron is mid-run.
 
-**Mark as handled** — on a domain page, any critical or warning flag can be
-acknowledged, with an optional note. The flag stays visible but stops counting
-toward urgency, so a domain you are already dealing with drops down the list
-instead of permanently occupying the top. Acknowledgements are pinned to the
-evidence that existed when they were made: if another rejection arrives, or a
-fresh DNS check still fails, the mark clears itself and the flag returns at
-full weight. Acknowledging a problem never hides the *next* one.
+**Dismiss / restore** — on a domain page, any flag can be dismissed. It moves
+into a collapsed "dismissed" list and stops counting toward urgency, so a
+domain you are already dealing with drops down the list instead of
+permanently occupying the top. A dismissal is keyed by the flag's stable
+`fingerprint` (e.g. `sender_block:Other`), not a row id — restoring it is one
+click, and if the *same* underlying condition produces that fingerprint again
+on a later ingestion run, the flag simply reappears (this falls naturally out
+of fingerprints being recomputed each run, not special "re-open" logic).
+There is no note field; the flag's own explanation is the record of what it
+was.
 
 **Language and theme.** The dashboard is bilingual (Polish default, English via
 the globe control in the topbar) — every flag, DNS warning, and ingestion
@@ -214,12 +240,28 @@ by source IP. Google's report tells you what Google thinks of your mail. Google,
 Microsoft, Yahoo, Seznam, WP/O2, Onet, and Interia are labelled individually;
 the rest fall into `Other`.
 
-**Sender blocks outrank everything.** `5.1.8` and the whole `5.7.x` family are
-stored as `sender_block`, separate from `hard`. A hard bounce says one address is
-wrong; a sender block says the provider is refusing your domain. It carries the
-highest urgency weight, so a blocked domain is always the first row. Permanent
-failures whose text describes a block or blocklist are also classified this way
-even when the code looks ordinary.
+**Sender blocks outrank everything — but not every sender block is shown as
+equally urgent.** `5.1.8` and the whole `5.7.x` family are stored as
+`sender_block`, separate from `hard`. A hard bounce says one address is
+wrong; a sender block says the provider is refusing your domain. Permanent
+failures whose text describes a block or blocklist are also classified this
+way even when the code looks ordinary. From there, severity depends on *which*
+provider and *how many times*: a block at a major provider (Google,
+Microsoft, Yahoo, Apple, Proton, Seznam, WP/O2, Onet, Interia, Mail.ru, GMX)
+is `critical` — the highest urgency weight, always the first row — but only
+once it has **recurred** (2 or more rejections there); a single rejection at
+a major provider, or any number at an unrecognized/minor one, is a calmer
+`warning` with advice to watch for a repeat rather than pause sending. One
+rejection is real signal, weaker than a pattern.
+
+One specific exclusion worth knowing: Microsoft's `5.7.509` ("sending domain
+does not pass DMARC verification and has a DMARC policy of reject") is *not*
+counted as a sender block, even though it's in the 5.7.x family. It means the
+receiver is enforcing this domain's own DMARC policy against a message that
+failed DMARC in transit — usually forwarding-alignment collateral at the
+recipient, or a real SPF/DKIM gap in one sending path — not a verdict on
+reputation, so it's excluded the same way a delivery loop or a full mailbox
+is (see the code-level exclusion list in `classify/bounce_codes.py`).
 
 **Bounce parsing is deliberately tolerant.** It tries the RFC 3464
 `message/delivery-status` part, then the `Diagnostic-Code`, then the message
@@ -273,8 +315,46 @@ deliverability/
   ingest/        rua.py, dns_check.py, bounce.py, blacklist.py, imap_client.py
   storage/       schema.py, database.py, repositories.py
   web/           FastAPI app, templates, vendored Chart.js
-scripts/         seed_demo.py
+scripts/         seed_demo.py, reclassify_bounces.py, reclassify_esp.py,
+                 restart_dashboard.sh
 ```
+
+---
+
+## Reliability lessons
+
+Not defensive programming in the abstract — each of these was added after
+reproducing the actual failure against real mailboxes on a memory-constrained
+host. Worth knowing before changing `ingest/`, so the same failure doesn't
+have to be rediscovered:
+
+- **A parsed email header can come back as an `email.header.Header` object,
+  not a plain string**, for certain header shapes — `x.get(...) or ""` only
+  guards `None`, not this case, and it crashes `re.search()` if left
+  uncoerced. Every header read in `ingest/bounce.py` and `imap_client.py`
+  goes through `str(...)` for this reason.
+- **IMAP fallback retries are capped at 3 consecutive failures**
+  (`imap_client._fetch_batch_with_fallback`). Uncapped, a dead connection
+  (as opposed to one bad message) turned into up to 50 sequential ~60s
+  timeouts — a single bad mailbox hanging ingestion for most of an hour.
+- **Bounce filtering happens at parse time, not after the whole mailbox is
+  loaded** (`fetch_messages(..., predicate=looks_like_bounce)`). A bounce
+  mailbox can echo back an entire original message — images, HTML,
+  attachments — unlike a compact DMARC report, so holding the whole mailbox
+  in memory before filtering was the single biggest contributor to OOM.
+- **A failed mailbox is retried once on a brand-new IMAP connection**, not
+  the same socket — fixes `SSL: BAD_WRITE_RETRY`-type errors from a
+  connection held open across more work than before.
+- **"Check everything" runs its 4 streams one at a time**, waiting for each
+  to finish before starting the next, instead of firing all 4 at once. Firing
+  them concurrently made peak memory the *sum* of all four streams running
+  together — the primary cause of OOM on a full domain list.
+- **A stuck `ingestion_runs` row (process killed mid-run) self-heals after
+  30 minutes** so it doesn't block that stream forever
+  (`IngestionRunRepository.fail_stale_running`). `scripts/restart_dashboard.sh`
+  also calls this immediately on every restart, since killing the server
+  while a background ingestion thread is running is exactly how a row gets
+  orphaned.
 
 ---
 
