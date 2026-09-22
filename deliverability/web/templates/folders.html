@@ -194,7 +194,7 @@ const T_RUNNING = {{ t('action.running') | tojson }};
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.classList.add('is-running');
-    for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
+    for (const stream of ['bounce', 'sent', 'rua', 'dns', 'dnsbl']) {
       msg.innerHTML = '<span class="spin"></span> ' + `${T_RUNNING} (${stream})`;
       try {
         await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });

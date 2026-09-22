@@ -331,7 +331,7 @@ h2 .hint { font-weight: 400; color: var(--text-dim); font-size: 12.5px; margin-l
   box-shadow: var(--shadow-card);
   padding: 15px 18px;
   display: grid;
-  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(84px, 0.7fr)) auto;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(5, minmax(84px, 0.7fr)) auto;
   gap: 18px;
   align-items: center;
   transition: border-color 0.12s ease, background 0.12s ease;

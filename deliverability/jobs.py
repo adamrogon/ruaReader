@@ -23,7 +23,7 @@ from .storage import Database, IngestionRunRepository, get_database
 logger = logging.getLogger(__name__)
 
 # Streams that can be triggered from the UI, mapped to their runner.
-STREAMS = ("rua", "dns", "bounce", "dnsbl")
+STREAMS = ("rua", "dns", "bounce", "dnsbl", "sent")
 
 _lock = threading.Lock()
 _in_flight: Dict[str, threading.Thread] = {}
@@ -47,6 +47,10 @@ def _runner_for(stream: str) -> Callable[..., Any]:
         from .ingest import blacklist
 
         return blacklist.run
+    if stream == "sent":
+        from .ingest import sent
+
+        return sent.run
     raise ValueError(f"Unknown stream: {stream!r}")
 
 

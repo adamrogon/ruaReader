@@ -198,6 +198,38 @@ blacklist_checks = Table(
 )
 
 
+# --- Module 5: Sent-folder volume ---------------------------------------------
+#
+# Extender (Linkhouse's own campaign sender) and Instantly (third-party
+# warm-up traffic) both relay through the same connected mailbox, so both
+# land in the same IMAP "Sent" folder read here. ``source`` is never a blind
+# either/or guess — see classify/sent_source.py — a message that matches
+# neither tool's fingerprint is stored as 'unrecognized' rather than folded
+# into 'extender' by default, so a drifting heuristic becomes a visible,
+# growing bucket instead of a silently wrong count.
+
+sent_messages = Table(
+    "sent_messages",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    Column("sending_domain", String(255), nullable=False, index=True),
+    Column("mailbox_name", String(128), nullable=False),
+    Column("message_id", String(512), nullable=False),
+    Column("sent_at", DateTime, nullable=False, index=True),
+    # 'extender' | 'instantly' | 'unrecognized'
+    Column("source", String(32), nullable=False, index=True),
+    # Which signal fired — kept purely so a human can sanity-check a
+    # classification without re-deriving the heuristic from memory.
+    Column("match_reason", String(64)),
+    Column("recipient_domain", String(255), index=True),
+    Column("subject", Text),
+    Column("ingested_at", DateTime, nullable=False),
+    UniqueConstraint("project_id", "message_id", "mailbox_name", name="uq_sent_identity"),
+    Index("ix_sent_domain_source_time", "sending_domain", "source", "sent_at"),
+)
+
+
 # --- Ingestion health ---------------------------------------------------------
 
 ingestion_runs = Table(
@@ -250,6 +282,8 @@ mailboxes = Table(
     Column("name", String(128), nullable=False),
     # 'rua'    — receives DMARC aggregate reports (Module 1)
     # 'bounce' — a sending mailbox that receives NDRs (Module 3)
+    # 'sent'   — a sending mailbox whose Sent folder is read for outbound
+    #            volume (Module 5)
     Column("kind", String(16), nullable=False, index=True),
     Column("host", String(255), nullable=False),
     Column("port", Integer, nullable=False, default=993),
@@ -263,7 +297,8 @@ mailboxes = Table(
     Column("password_env", String(128)),
     Column("folder", String(255), nullable=False, default="INBOX"),
     Column("processed_folder", String(255)),
-    # Only meaningful for kind='bounce': which sending domain the NDRs belong to.
+    # Only meaningful for kind='bounce'/'sent': which sending domain the
+    # NDRs/outbound mail belong to.
     Column("domain", String(255)),
     Column("enabled", Boolean, nullable=False, default=True),
     # Result of the last "test connection" run, shown next to the mailbox.
@@ -324,6 +359,7 @@ ALL_TABLES = (
     dns_checks,
     bounces,
     blacklist_checks,
+    sent_messages,
     ingestion_runs,
     domains,
     mailboxes,

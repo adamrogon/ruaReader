@@ -35,9 +35,10 @@ class ConfigError(RuntimeError):
 class Mailbox:
     """An IMAP mailbox to poll.
 
-    Used for both rua report mailboxes (Module 1) and bounce mailboxes
-    (Module 3). ``domain`` is only meaningful for bounce mailboxes, where it
-    ties an NDR back to the sending domain.
+    Used for rua report mailboxes (Module 1), bounce mailboxes (Module 3),
+    and sent mailboxes (Module 5). ``domain`` is only meaningful for bounce
+    and sent mailboxes, where it ties an NDR — or an outbound message — back
+    to the sending domain.
 
     A password comes from one of two places: ``password_encrypted`` for
     mailboxes added through the dashboard, or ``password_env`` for ones
@@ -345,4 +346,20 @@ def load_bounce_mailboxes(database=None, settings: Optional[Settings] = None) ->
 
     repo = MailboxConfigRepository(database, settings.project_id)
     boxes = [_mailbox_from_row(row) for row in repo.list_all(kind="bounce", include_disabled=False)]
+    return [b for b in boxes if b.domain]
+
+
+def load_sent_mailboxes(database=None, settings: Optional[Settings] = None) -> List[Mailbox]:
+    """Enabled sending mailboxes whose Sent folder is read for outbound
+    volume (Module 5). Only configurable from the dashboard — there is no
+    YAML seed path, since this reads the actual sending persona's mailbox
+    (e.g. a real outreach inbox), not a shared reports/NDR catch-all."""
+    from .storage import MailboxConfigRepository, get_database
+
+    settings = settings or Settings.from_env()
+    database = database or get_database(settings)
+    seed_config_from_yaml_if_empty(database, settings)
+
+    repo = MailboxConfigRepository(database, settings.project_id)
+    boxes = [_mailbox_from_row(row) for row in repo.list_all(kind="sent", include_disabled=False)]
     return [b for b in boxes if b.domain]

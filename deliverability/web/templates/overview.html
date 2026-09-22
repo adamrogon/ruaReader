@@ -102,7 +102,7 @@
       </div>
 
       <div class="metric">
-        <div class="metric-label">{{ t('metric.messages') }}</div>
+        <div class="metric-label th-hint" data-hint="{{ t('metric.messages_hint') }}">{{ t('metric.messages') }}</div>
         <div class="metric-value {{ 'is-dim' if not m.messages }}">{{ "{:,}".format(m.messages) }}</div>
       </div>
 
@@ -132,6 +132,17 @@
             {{ m.spf_lookups }}/{{ m.spf_lookup_limit }}
           </div>
         {% else %}
+          <div class="metric-value is-dim">—</div>
+        {% endif %}
+      </div>
+
+      <div class="metric">
+        {% if m.sent_has_data %}
+          {% set unrec_suffix = t('metric.sent_hint_unrecognized_suffix', n=m.sent_unrecognized) if m.sent_unrecognized else '' %}
+          <div class="metric-label th-hint" data-hint="{{ t('metric.sent_hint', extender=m.sent, instantly=m.sent_instantly, unrecognized_suffix=unrec_suffix) }}">{{ t('metric.sent') }}</div>
+          <div class="metric-value {{ 'is-dim' if not m.sent }}">{{ "{:,}".format(m.sent) }}</div>
+        {% else %}
+          <div class="metric-label th-hint" data-hint="{{ t('metric.sent_no_data') }}">{{ t('metric.sent') }}</div>
           <div class="metric-value is-dim">—</div>
         {% endif %}
       </div>
@@ -285,8 +296,8 @@ const T_RUNNING = {{ t('action.running') | tojson }};
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     btn.classList.add('is-running');
-    // Bounces are the time-sensitive stream, so they go first.
-    for (const stream of ['bounce', 'rua', 'dns', 'dnsbl']) {
+    // Bounces and sent-folder volume are the time-sensitive streams, so they go first.
+    for (const stream of ['bounce', 'sent', 'rua', 'dns', 'dnsbl']) {
       msg.innerHTML = '<span class="spin"></span> ' + `${T_RUNNING} (${stream})`;
       try {
         await fetch(`/api/run/${stream}?lang=${LANG}`, { method: 'POST' });

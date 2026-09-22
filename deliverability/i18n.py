@@ -103,9 +103,30 @@ MESSAGES: dict = {
     "table.none": {"pl": "brak", "en": "none"},
 
     "metric.messages": {"pl": "Wiadomości", "en": "Messages"},
+    "metric.messages_hint": {
+        "pl": "Z raportów DMARC (dane od odbiorców, ~24-72h opóźnienia) — zawiera WSZYSTKO wysłane z tej "
+        "domeny, łącznie z Instantly. To podstawa Zgodności i innych flag na tej stronie. To co innego niż "
+        "metryka Wysłano obok, która czyta Twoją skrzynkę Wysłane bez Instantly.",
+        "en": "From DMARC reports (data from recipients, ~24-72h delay) — includes EVERYTHING sent from "
+        "this domain, Instantly included. This is what Compliance and the other flags on this page are "
+        "based on. Different from the Sent metric next to it, which reads your Sent folder and excludes Instantly.",
+    },
     "metric.compliance": {"pl": "Zgodność", "en": "Compliance"},
     "metric.bounces": {"pl": "Odbicia", "en": "Bounces"},
     "metric.spf_lookups": {"pl": "Zapytania SPF", "en": "SPF lookups"},
+    "metric.sent": {"pl": "Wysłano", "en": "Sent"},
+    "metric.sent_hint": {
+        "pl": "Prawdziwe kampanie z Extendera: {extender:,} · Instantly (rozgrzewka, nieliczone): {instantly:,}{unrecognized_suffix}",
+        "en": "Real Extender campaigns: {extender:,} · Instantly (warm-up, excluded): {instantly:,}{unrecognized_suffix}",
+    },
+    "metric.sent_hint_unrecognized_suffix": {
+        "pl": " · niesklasyfikowane: {n:,}",
+        "en": " · unrecognized: {n:,}",
+    },
+    "metric.sent_no_data": {
+        "pl": "Brak skonfigurowanej skrzynki Wysłane dla tej domeny — dodaj ją w Ustawieniach.",
+        "en": "No Sent mailbox configured for this domain — add one in Settings.",
+    },
 
     "badge.ok": {"pl": "ok", "en": "ok"},
     "badge.healthy": {"pl": "zdrowa", "en": "healthy"},
@@ -420,6 +441,7 @@ MESSAGES: dict = {
     "stream.bounce": {"pl": "Odbicia / NDR", "en": "Bounces / NDRs"},
     "stream.dns": {"pl": "Sprawdzenia DNS", "en": "DNS checks"},
     "stream.dnsbl": {"pl": "Sprawdzenia blacklist", "en": "Blacklist checks"},
+    "stream.sent": {"pl": "Folder Wysłane", "en": "Sent folder"},
 
     "ingest.never_run": {
         # A "{label}:" prefix sidesteps Polish case agreement (embedding the
@@ -926,6 +948,11 @@ MESSAGES: dict = {
         "pl": "NDR wraca zawsze na skrzynkę, z której wyszedł mail — jedna pozycja na skrzynkę",
         "en": "an NDR always returns to the mailbox that sent the message — one entry per mailbox",
     },
+    "settings.mailboxes_sent": {"pl": "Skrzynki nadawcze (folder Wysłane)", "en": "Sending mailboxes (Sent folder)"},
+    "settings.mailboxes_sent_hint": {
+        "pl": "czyta folder Wysłane realnej skrzynki wysyłkowej (np. Extendera) — jedna pozycja na skrzynkę",
+        "en": "reads the Sent folder of a real sending mailbox (e.g. Extender) — one entry per mailbox",
+    },
     "settings.add_domain": {"pl": "Dodaj domenę", "en": "Add domain"},
     "settings.add_mailbox": {"pl": "Dodaj skrzynkę", "en": "Add mailbox"},
     "settings.no_domains": {"pl": "Nie dodano jeszcze żadnej domeny.", "en": "No domains added yet."},
@@ -951,6 +978,10 @@ MESSAGES: dict = {
         "en": "leave blank to keep the saved password",
     },
     "field.folder": {"pl": "Folder", "en": "Folder"},
+    "field.folder_hint_sent": {
+        "pl": "dokładna nazwa folderu Wysłane w tej skrzynce — różni się między dostawcami/językami konta",
+        "en": "the exact Sent folder name for this mailbox — varies by provider and account language",
+    },
     "field.processed_folder": {"pl": "Folder na przetworzone", "en": "Processed folder"},
     "field.processed_hint": {"pl": "opcjonalnie", "en": "optional"},
     "field.sending_domain": {"pl": "Domena nadawcza", "en": "Sending domain"},
@@ -1108,6 +1139,22 @@ MESSAGES: dict = {
         "pl": "{created} dodanych, {skipped} pominiętych, {errors} błędów.",
         "en": "{created} created, {skipped} skipped, {errors} errors.",
     },
+    "bulk_import.status.updated": {"pl": "zaktualizowano", "en": "updated"},
+    "bulk_import.summary_sent": {
+        "pl": "{created} dodanych, {updated} zaktualizowanych, {errors} błędów.",
+        "en": "{created} created, {updated} updated, {errors} errors.",
+    },
+    "settings.bulk_import_sent_title": {"pl": "Import zbiorczy skrzynek Wysłane (XLSX)", "en": "Bulk import Sent mailboxes (XLSX)"},
+    "settings.bulk_import_sent_hint": {
+        "pl": "PROTOTYP — domena musi być już monitorowana; wiersz dla domeny, która już ma skrzynkę "
+        "Wysłane, aktualizuje ją zamiast dodawać drugą.",
+        "en": "PROTOTYPE — the domain must already be monitored; a row for a domain that already has "
+        "a Sent mailbox updates it instead of adding a second one.",
+    },
+    "saved.bulk_import_sent": {
+        "pl": "Import skrzynek Wysłane zakończony — zobacz wyniki poniżej.",
+        "en": "Sent mailbox import finished — see results below.",
+    },
     "error.domain_exists": {
         "pl": "Ta domena jest już na liście.",
         "en": "That domain is already on the list.",
@@ -1224,6 +1271,10 @@ MESSAGES: dict = {
     "field.sending_domain_hint": {
         "pl": "wybierz z listy monitorowanych domen — dane odbić przypiszą się właśnie do niej",
         "en": "pick from monitored domains — bounce data will be tied to this one",
+    },
+    "field.sending_domain_hint_sent": {
+        "pl": "wybierz z listy monitorowanych domen — wolumen z folderu Wysłane przypisze się do niej",
+        "en": "pick from monitored domains — Sent-folder volume will be tied to this one",
     },
     "field.sending_domain_placeholder": {
         "pl": "— wybierz domenę —",

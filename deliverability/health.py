@@ -28,6 +28,7 @@ from .storage import (
     DmarcRepository,
     DnsRepository,
     IngestionRunRepository,
+    SentRepository,
     get_database,
 )
 
@@ -192,7 +193,7 @@ def _as_aware(value: Any) -> Optional[dt.datetime]:
 
 
 def ingestion_health(
-    database: Database, settings: Settings, streams: Sequence[str] = ("rua", "bounce", "dns", "dnsbl")
+    database: Database, settings: Settings, streams: Sequence[str] = ("rua", "bounce", "dns", "dnsbl", "sent")
 ) -> List[Dict[str, Any]]:
     """Freshness of each ingestion stream.
 
@@ -308,6 +309,7 @@ def build_domain_status(
     sender_blocks: Sequence[Dict[str, Any]],
     blacklist_rows: Sequence[Dict[str, Any]],
     dismissed_fingerprints: Optional[Sequence[str]] = None,
+    sent_counts: Optional[Dict[str, int]] = None,
 ) -> DomainStatus:
     """Assemble one domain's status from the four streams."""
     status = DomainStatus(domain=domain_name)
@@ -551,6 +553,8 @@ def build_domain_status(
     )
     critical_blacklist = any(f.fingerprint == "blacklist" and f.severity == "critical" for f in status.flags)
 
+    sent_counts = sent_counts or {}
+
     status.metrics = {
         "messages": compliance.get("total", 0),
         "passed": compliance.get("passed", 0),
@@ -570,6 +574,16 @@ def build_domain_status(
         "spf_lookups": (dns_row or {}).get("spf_lookup_count"),
         "spf_lookup_limit": (dns_row or {}).get("spf_lookup_limit"),
         "dns_checked_at": (dns_row or {}).get("checked_at"),
+        # Sent-folder volume (Module 5), split by who actually generated the
+        # message — see classify/sent_source.py. "sent" is the real-campaign
+        # count only (Instantly warm-up and unrecognized are excluded from
+        # it deliberately); "sent_unrecognized" is surfaced too, never
+        # silently merged into "sent", so a drifting classifier shows up as
+        # a growing number instead of a quietly wrong one.
+        "sent": sent_counts.get("extender", 0),
+        "sent_instantly": sent_counts.get("instantly", 0),
+        "sent_unrecognized": sent_counts.get("unrecognized", 0),
+        "sent_has_data": bool(sent_counts),
     }
     status.esp_rows = _esp_summary(esp_rows)
     return status
@@ -653,6 +667,7 @@ def domain_statuses(
     dns_repo = DnsRepository(database, settings.project_id)
     bounce_repo = BounceRepository(database, settings.project_id)
     blacklist_repo = BlacklistRepository(database, settings.project_id)
+    sent_repo = SentRepository(database, settings.project_id)
     dismissed_repo = DismissedFlagRepository(database, settings.project_id)
     dismissed_by_domain = dismissed_repo.all_by_domain()
 
@@ -664,6 +679,7 @@ def domain_statuses(
     block_rows = bounce_repo.sender_blocks(since)
     dns_latest = dns_repo.latest_per_domain()
     blacklist_latest = blacklist_repo.latest_per_domain()
+    sent_rows = sent_repo.counts_by_source(since)
 
     def rows_for(rows: Sequence[Dict[str, Any]], name: str) -> List[Dict[str, Any]]:
         return [r for r in rows if r.get("domain") == name]
@@ -673,6 +689,7 @@ def domain_statuses(
         bounce_classes = {
             r["bounce_class"]: r["count"] for r in bounce_rows if r.get("domain") == domain.name
         }
+        sent_counts = {r["source"]: r["count"] for r in sent_rows if r.get("domain") == domain.name}
         status = build_domain_status(
             domain_name=domain.name,
             dns_row=dns_latest.get(domain.name),
@@ -682,6 +699,7 @@ def domain_statuses(
             sender_blocks=rows_for(block_rows, domain.name),
             blacklist_rows=blacklist_latest.get(domain.name, []),
             dismissed_fingerprints=dismissed_by_domain.get(domain.name),
+            sent_counts=sent_counts,
         )
         statuses.append(status)
 

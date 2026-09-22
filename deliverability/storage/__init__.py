@@ -17,6 +17,7 @@ from .repositories import (
     FolderRepository,
     IngestionRunRepository,
     MailboxConfigRepository,
+    SentRepository,
 )
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "DnsRepository",
     "BounceRepository",
     "BlacklistRepository",
+    "SentRepository",
     "IngestionRunRepository",
     "DomainConfigRepository",
     "MailboxConfigRepository",

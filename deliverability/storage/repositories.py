@@ -21,6 +21,7 @@ from .schema import (
     dns_checks,
     domain_folders,
     ingestion_runs,
+    sent_messages,
 )
 from .schema import domains as domains_table
 from .schema import folders as folders_table
@@ -837,6 +838,85 @@ class BlacklistRepository(_BaseRepository):
                 )
             )
             .order_by(blacklist_checks.c.checked_at)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+
+# --- Module 5 -----------------------------------------------------------------
+
+
+class SentRepository(_BaseRepository):
+    """Sent-folder volume, split by who actually generated each message."""
+
+    def existing_message_ids(self, mailbox_name: str, message_ids: Iterable[str]) -> set:
+        ids = [m for m in message_ids if m]
+        if not ids:
+            return set()
+        stmt = select(sent_messages.c.message_id).where(
+            and_(
+                sent_messages.c.project_id == self.project_id,
+                sent_messages.c.mailbox_name == mailbox_name,
+                sent_messages.c.message_id.in_(ids),
+            )
+        )
+        with self.db.connect() as conn:
+            return {row[0] for row in conn.execute(stmt)}
+
+    def insert_many(self, records: Sequence[Dict[str, Any]]) -> int:
+        if not records:
+            return 0
+        now = dt.datetime.now(dt.timezone.utc)
+        payload = [dict(r, project_id=self.project_id, ingested_at=r.get("ingested_at", now)) for r in records]
+        with self.db.connect() as conn:
+            conn.execute(sent_messages.insert(), payload)
+        return len(payload)
+
+    def counts_by_source(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Per-domain, per-source counts within a window — the input to the
+        domain list's "Wysłano" metric (see health.py's ``build_domain_status``)."""
+        conditions = [
+            sent_messages.c.project_id == self.project_id,
+            sent_messages.c.sent_at >= since,
+        ]
+        if domain:
+            conditions.append(sent_messages.c.sending_domain == domain)
+
+        stmt = (
+            select(
+                sent_messages.c.sending_domain.label("domain"),
+                sent_messages.c.source,
+                func.count(sent_messages.c.id).label("count"),
+            )
+            .where(and_(*conditions))
+            .group_by(sent_messages.c.sending_domain, sent_messages.c.source)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def daily_counts(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
+        day = func.date(sent_messages.c.sent_at).label("day")
+        conditions = [
+            sent_messages.c.project_id == self.project_id,
+            sent_messages.c.sent_at >= since,
+        ]
+        if isinstance(domain, str):
+            conditions.append(sent_messages.c.sending_domain == domain)
+        elif domain:
+            conditions.append(sent_messages.c.sending_domain.in_(domain))
+
+        stmt = (
+            select(
+                day,
+                sent_messages.c.sending_domain.label("domain"),
+                sent_messages.c.source,
+                func.count(sent_messages.c.id).label("count"),
+            )
+            .where(and_(*conditions))
+            .group_by(day, sent_messages.c.sending_domain, sent_messages.c.source)
+            .order_by(day)
         )
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))

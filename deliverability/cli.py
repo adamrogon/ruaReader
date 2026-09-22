@@ -4,6 +4,7 @@
     python -m deliverability.cli dns       # SPF / DMARC / DKIM / MX  (daily)
     python -m deliverability.cli bounce    # bounces / NDRs           (hourly)
     python -m deliverability.cli dnsbl     # blacklist checks         (daily)
+    python -m deliverability.cli sent      # Sent-folder volume       (hourly)
     python -m deliverability.cli daily     # rua + dns + dnsbl
     python -m deliverability.cli status    # print current state, no network
 
@@ -69,6 +70,14 @@ def cmd_dnsbl(args: argparse.Namespace) -> int:
     from .ingest import blacklist
 
     result = blacklist.run()
+    _print(result, args.json)
+    return 0 if result["status"] == "ok" else 1
+
+
+def cmd_sent(args: argparse.Namespace) -> int:
+    from .ingest import sent
+
+    result = sent.run(since_days=args.since_days)
     _print(result, args.json)
     return 0 if result["status"] == "ok" else 1
 
@@ -159,6 +168,10 @@ def main(argv=None) -> int:
 
     dnsbl_parser = sub.add_parser("dnsbl", help="Check sending IPs against DNSBLs.")
     dnsbl_parser.set_defaults(func=cmd_dnsbl)
+
+    sent_parser = sub.add_parser("sent", help="Ingest Sent-folder volume, split real campaigns from warm-up.")
+    sent_parser.add_argument("--since-days", type=int, default=7)
+    sent_parser.set_defaults(func=cmd_sent)
 
     daily_parser = sub.add_parser("daily", help="Run rua + dns + dnsbl.")
     daily_parser.add_argument("--since-days", type=int, default=14)

@@ -153,7 +153,7 @@
         <input type="text" name="name" required value="{{ item.name if item else '' }}" autocomplete="off">
         <span class="field-hint">{{ t('field.name_hint') }}</span>
       </label>
-      {% if kind == 'bounce' %}
+      {% if kind in ('bounce', 'sent') %}
         {# Dropdown, not text — the whole point is that the user cannot type a
            domain that doesn't match one already monitored. The user's chosen
            domain is preselected on edit; if it is no longer on the monitored
@@ -173,7 +173,7 @@
               </option>
             {% endif %}
           </select>
-          <span class="field-hint">{{ t('field.sending_domain_hint') }}</span>
+          <span class="field-hint">{{ t('field.sending_domain_hint') if kind == 'bounce' else t('field.sending_domain_hint_sent') }}</span>
         </label>
       {% endif %}
       <label class="field">
@@ -201,7 +201,17 @@
       </label>
       <label class="field">
         <span class="field-label">{{ t('field.folder') }}</span>
-        <input type="text" name="folder" value="{{ item.folder if item else 'INBOX' }}" autocomplete="off">
+        {% if kind == 'sent' %}
+          {# No safe default to guess here — Gmail alone varies by account
+             language ("[Gmail]/Sent Mail" / "[Gmail]/Wysłane" / ...), and a
+             wrong guess would silently read the wrong folder. The user has
+             to name it explicitly. #}
+          <input type="text" name="folder" value="{{ item.folder if item else '' }}" required
+                 placeholder="np. [Gmail]/Sent Mail" autocomplete="off">
+          <span class="field-hint">{{ t('field.folder_hint_sent') }}</span>
+        {% else %}
+          <input type="text" name="folder" value="{{ item.folder if item else 'INBOX' }}" autocomplete="off">
+        {% endif %}
       </label>
       <label class="field">
         <span class="field-label">{{ t('field.processed_folder') }}</span>
@@ -247,7 +257,7 @@
         </div>
         <div class="cfg-meta">
           {{ item.username }} · {{ item.host }}:{{ item.port }}{{ ' · SSL' if item.ssl }} · {{ item.folder }}
-          {% if kind == 'bounce' and item.domain %} · {{ item.domain }}{% endif %}
+          {% if kind in ('bounce', 'sent') and item.domain %} · {{ item.domain }}{% endif %}
         </div>
         {% if item.last_test_ok is false and item.last_test_error %}
           <div class="cfg-error">{{ item.last_test_error }}</div>
@@ -286,7 +296,8 @@
   'folder_saved': t('saved.folder'),
   'folder_deleted': t('deleted.folder'),
   'domain_folders_saved': t('saved.domain_folders'),
-  'bulk_import_done': t('saved.bulk_import')
+  'bulk_import_done': t('saved.bulk_import'),
+  'bulk_import_sent_done': t('saved.bulk_import_sent')
 } %}
 {% set errors = {
   'required': t('error.required'),
@@ -485,6 +496,58 @@
 <div class="cfg-list">{{ mailbox_rows('bounce', bounce_mailboxes) }}</div>
 <button type="button" class="btn btn-add js-edit" data-target="bounce-add">+ {{ t('settings.add_mailbox') }}</button>
 <div class="cfg-edit" id="bounce-add" hidden>{{ mailbox_form('bounce', none, 'mbform-new-bounce') }}</div>
+
+{# --- Sent mailboxes --------------------------------------------------------- #}
+<h2>{{ t('settings.mailboxes_sent') }} <span class="hint">{{ t('settings.mailboxes_sent_hint') }}</span></h2>
+<div class="cfg-list">{{ mailbox_rows('sent', sent_mailboxes) }}</div>
+<button type="button" class="btn btn-add js-edit" data-target="sent-add">+ {{ t('settings.add_mailbox') }}</button>
+<div class="cfg-edit" id="sent-add" hidden>{{ mailbox_form('sent', none, 'mbform-new-sent') }}</div>
+
+{# --- Bulk import: sent mailboxes (prototype) --------------------------------- #}
+<h3 style="margin-top:16px">{{ t('settings.bulk_import_sent_title') }} <span class="hint">{{ t('settings.bulk_import_sent_hint') }}</span></h3>
+<div class="cfg-row" style="align-items:center">
+  <div class="cfg-main">
+    <a class="btn btn-ghost" href="/settings/bulk-import/sent-template" download>{{ t('btn.download_template') }}</a>
+  </div>
+  <form method="post" action="/settings/bulk-import/sent?lang={{ lang }}" enctype="multipart/form-data" class="cfg-actions" style="align-items:center">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit" class="btn btn-primary">{{ t('btn.upload_import') }}</button>
+  </form>
+</div>
+
+{% if sent_bulk_results %}
+  {% set created = sent_bulk_results | selectattr('status', 'equalto', 'created') | list | length %}
+  {% set updated = sent_bulk_results | selectattr('status', 'equalto', 'updated') | list | length %}
+  {% set errored = sent_bulk_results | selectattr('status', 'equalto', 'error') | list | length %}
+  <h3 style="margin:16px 0 8px">{{ t('bulk_import.results_title') }}</h3>
+  <p class="hint">{{ t('bulk_import.summary_sent', created=created, updated=updated, errors=errored) }}</p>
+  <div class="table-wrap" style="margin-top:8px">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left">{{ t('bulk_import.row') }}</th>
+          <th style="text-align:left">{{ t('table.domain') }}</th>
+          <th style="text-align:left">{{ t('table.class') }}</th>
+          <th style="text-align:left">{{ t('table.reason') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in sent_bulk_results %}
+          <tr>
+            <td style="text-align:left">{{ r.row }}</td>
+            <td style="text-align:left">{{ r.domain }}</td>
+            <td style="text-align:left">
+              <span class="badge {{ 'ok' if r.status in ('created', 'updated') else 'critical' }}">
+                {{ t('bulk_import.status.' ~ r.status) }}
+              </span>
+            </td>
+            <td style="text-align:left" class="num-dim">{{ r.reason }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

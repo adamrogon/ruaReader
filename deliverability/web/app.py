@@ -1147,7 +1147,10 @@ def _selectors_from_form(raw: str) -> List[str]:
 
 
 def _settings_context(
-    notice: Optional[str] = None, error: Optional[str] = None, bulk_results: Optional[List[Dict[str, Any]]] = None
+    notice: Optional[str] = None,
+    error: Optional[str] = None,
+    bulk_results: Optional[List[Dict[str, Any]]] = None,
+    sent_bulk_results: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     ctx = _context()
     settings, database = ctx["settings"], ctx["database"]
@@ -1168,18 +1171,24 @@ def _settings_context(
     # monitored list (so editing does not silently drop it). Marked as orphan
     # so the template can flag it.
     bounce_mailboxes = [m for m in mailboxes if m["kind"] == "bounce"]
+    sent_mailboxes = [m for m in mailboxes if m["kind"] == "sent"]
     orphan_bounce_domains = sorted(
         {m["domain"] for m in bounce_mailboxes if m["domain"] and m["domain"] not in monitored_names}
+    )
+    orphan_sent_domains = sorted(
+        {m["domain"] for m in sent_mailboxes if m["domain"] and m["domain"] not in monitored_names}
     )
 
     return {
         "domains": domains,
         "monitored_names": sorted(monitored_names),
         "orphan_bounce_domains": orphan_bounce_domains,
+        "orphan_sent_domains": orphan_sent_domains,
         "all_folders": all_folders,
         "folder_ids_by_domain": folder_ids_by_domain,
         "rua_mailboxes": [m for m in mailboxes if m["kind"] == "rua"],
         "bounce_mailboxes": bounce_mailboxes,
+        "sent_mailboxes": sent_mailboxes,
         "unknown_report_domains": dmarc_repo.unknown_report_domains(),
         "secret_key_ok": secret_key_configured(),
         "notice": notice,
@@ -1187,6 +1196,7 @@ def _settings_context(
         "days": DEFAULT_WINDOW_DAYS,
         "page": "settings",
         "bulk_results": bulk_results,
+        "sent_bulk_results": sent_bulk_results,
     }
 
 
@@ -1251,6 +1261,17 @@ _BULK_IMPORT_HEADERS = [
     "same_mailbox_for_rua_and_bounce",
     "rua_imap_host", "rua_imap_port", "rua_imap_ssl", "rua_imap_username", "rua_imap_password", "rua_imap_folder",
     "folders",
+]
+
+# Deliberately separate from _BULK_IMPORT_HEADERS above: that importer creates
+# a brand-new monitored domain (and skips ones that already exist); this one
+# is for adding/fixing a Sent mailbox on domains that are usually *already*
+# monitored — no domain/dkim/folders columns, and re-running it against a
+# domain that already has a sent mailbox updates it instead of erroring, so
+# fixing a typo'd password for many domains at once doesn't mean deleting
+# rows by hand first.
+_BULK_IMPORT_SENT_HEADERS = [
+    "domain", "imap_host", "imap_port", "imap_ssl", "imap_username", "imap_password", "imap_folder",
 ]
 
 
@@ -1416,6 +1437,140 @@ async def bulk_import(request: Request, file: UploadFile = File(...)) -> Respons
             _fail(f"nieoczekiwany błąd: {exc}")
 
     return _render(request, "settings.html", lang, _settings_context(notice="bulk_import_done", bulk_results=results))
+
+
+@app.get("/settings/bulk-import/sent-template")
+def bulk_import_sent_template() -> Response:
+    """Generated on the fly, like bulk_import_template() above, so the
+    columns can never drift out of sync with what bulk_import_sent() parses."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Import"
+    ws.append(_BULK_IMPORT_SENT_HEADERS)
+    ws.append(["example.com", "imap.gmail.com", 993, "yes", "agata@example.com", "haslo-aplikacji-tutaj", "[Gmail]/Sent Mail"])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    ws["A1"].comment = Comment(
+        "Domena musi być już monitorowana (dodana w tym narzędziu) — ten import "
+        "tylko dodaje/aktualizuje jej skrzynkę Wysłane, nie tworzy nowej domeny.",
+        "Deliverability Monitor",
+    )
+    ws["G1"].comment = Comment(
+        "Dokładna nazwa folderu Wysłane w tej skrzynce — różni się między dostawcami "
+        "i językami konta (np. [Gmail]/Sent Mail vs [Gmail]/Wysłane).",
+        "Deliverability Monitor",
+    )
+    ws["F1"].comment = Comment("Hasło aplikacji w postaci jawnej — usuń plik z dysku po imporcie.", "Deliverability Monitor")
+    for i, header in enumerate(_BULK_IMPORT_SENT_HEADERS, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = max(16, len(header) + 2)
+
+    buf = BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="szablon-import-wyslane.xlsx"'},
+    )
+
+
+@app.post("/settings/bulk-import/sent")
+async def bulk_import_sent(request: Request, file: UploadFile = File(...)) -> Response:
+    lang = _resolve_request_lang(request)
+    ctx = _context()
+    database, settings = ctx["database"], ctx["settings"]
+    domain_repo = DomainConfigRepository(database, settings.project_id)
+    mailbox_repo = MailboxConfigRepository(database, settings.project_id)
+
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    # Read fully into memory and never touch disk — same reasoning as
+    # bulk_import() above: the file carries plaintext IMAP passwords.
+    raw = await file.read()
+    try:
+        wb = load_workbook(BytesIO(raw), data_only=True)
+    except Exception:
+        return _render(
+            request, "settings.html", lang,
+            _settings_context(error="required", sent_bulk_results=[{"row": "-", "domain": "-", "status": "error", "reason": "Nie udało się odczytać pliku XLSX."}]),
+        )
+    ws = wb.active
+    header_row = [str(c.value).strip() if c.value else "" for c in ws[1]]
+
+    monitored_names = {d["name"] for d in domain_repo.list_all()}
+    existing_sent_by_domain = {
+        m["domain"]: m for m in mailbox_repo.list_all(kind="sent") if m["domain"]
+    }
+    results: List[Dict[str, Any]] = []
+
+    for row_num, raw_row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        row = dict(zip(header_row, raw_row))
+        domain_name = str(row.get("domain") or "").strip().lower()
+        if not domain_name:
+            continue  # a fully blank row is not an error, just skipped silently
+
+        def _fail(reason: str) -> None:
+            results.append({"row": row_num, "domain": domain_name, "status": "error", "reason": reason})
+
+        try:
+            if domain_name not in monitored_names:
+                _fail("domena nie jest monitorowana — dodaj ją najpierw (sekcja Domeny albo import domen)")
+                continue
+
+            host = str(row.get("imap_host") or "").strip()
+            username = str(row.get("imap_username") or "").strip()
+            password = str(row.get("imap_password") or "").strip()
+            folder = str(row.get("imap_folder") or "").strip()
+            if not host or not username or not folder:
+                _fail("brak imap_host / imap_username / imap_folder")
+                continue
+
+            existing = existing_sent_by_domain.get(domain_name)
+            if not existing and not password:
+                _fail("brak imap_password (wymagane przy tworzeniu nowej skrzynki)")
+                continue
+
+            fields: Dict[str, Any] = {
+                "kind": "sent",
+                "host": host,
+                "port": int(row.get("imap_port") or 993),
+                "ssl": _truthy_yes(row.get("imap_ssl")),
+                "username": username,
+                "folder": folder,
+                "domain": domain_name,
+                "enabled": True,
+            }
+            if password:
+                try:
+                    fields["password_encrypted"] = encrypt_secret(password)
+                    fields["password_env"] = None
+                except SecretsError:
+                    _fail("SECRET_KEY nie jest ustawiony — nie można zaszyfrować hasła")
+                    continue
+
+            if existing:
+                mailbox_repo.update(existing["id"], **fields)
+                results.append({"row": row_num, "domain": domain_name, "status": "updated", "reason": ""})
+            else:
+                fields["name"] = f"{domain_name}-sent"
+                new_id = mailbox_repo.create(**fields)
+                existing_sent_by_domain[domain_name] = {"id": new_id, "domain": domain_name}
+                results.append({"row": row_num, "domain": domain_name, "status": "created", "reason": ""})
+        except Exception as exc:  # noqa: BLE001 — one bad row must not kill the rest of the import
+            _fail(f"nieoczekiwany błąd: {exc}")
+
+    return _render(
+        request, "settings.html", lang,
+        _settings_context(notice="bulk_import_sent_done", sent_bulk_results=results),
+    )
 
 
 @app.post("/settings/domains")
@@ -1592,12 +1747,12 @@ def save_mailbox(
 
     clean_domain = domain.strip().lower() or None
 
-    if kind == "bounce":
+    if kind in ("bounce", "sent"):
         if not clean_domain:
             return _settings_redirect(lang, error="required")
-        # A bounce mailbox that references a domain not on the monitored list
-        # would silently attribute its bounces to that domain, and nothing on
-        # the dashboard would show them (there is no domain page for it).
+        # A bounce/sent mailbox that references a domain not on the monitored
+        # list would silently attribute its data to that domain, and nothing
+        # on the dashboard would show it (there is no domain page for it).
         # Refuse now, when the user is still looking at the form.
         domain_repo = DomainConfigRepository(ctx["database"], ctx["settings"].project_id)
         monitored = {d["name"] for d in domain_repo.list_all()}
@@ -1608,7 +1763,7 @@ def save_mailbox(
 
     fields: Dict[str, Any] = {
         "name": clean_name,
-        "kind": kind if kind in ("rua", "bounce") else "rua",
+        "kind": kind if kind in ("rua", "bounce", "sent") else "rua",
         "host": host.strip(),
         "port": int(port),
         "ssl": ssl is not None,
