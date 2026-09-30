@@ -34,7 +34,13 @@ _EXTENDER_PIXEL_RE = re.compile(r"app\.linkhouse\.co/mail/icon\.png", re.IGNOREC
 
 # SwiftMailer's default Message-ID domain when no explicit one is configured
 # — a side effect of Extender's mailer library, not an intentional marker.
-_EXTENDER_MESSAGE_ID_RE = re.compile(r"@swift\.generated$", re.IGNORECASE)
+# The header value always arrives wrapped in angle brackets
+# (<...@swift.generated>), so the closing '>' has to be optional here — a
+# bare `$` anchor never matches and silently sends every message with this
+# Message-ID to 'unrecognized' instead. Confirmed against real mail on
+# 2026-09-30: linkhousemediahub.com had 450/558 messages misclassified this
+# way over one 7-day window.
+_EXTENDER_MESSAGE_ID_RE = re.compile(r"@swift\.generated>?\s*$", re.IGNORECASE)
 
 # Instantly relays via SMTP AUTH from AWS EC2 (us-east-1, "compute-1") into
 # the connected inbox's own provider — visible in the Received header chain.
