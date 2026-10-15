@@ -872,6 +872,25 @@ class SentRepository(_BaseRepository):
             conn.execute(sent_messages.insert(), payload)
         return len(payload)
 
+    def update_classification(self, mailbox_name: str, records: Sequence[Dict[str, Any]]) -> int:
+        """Rewrite source/match_reason/submit_host on already-stored rows —
+        used when a classifier signal changed and stored rows need catching up
+        from a fresh read of the mailbox."""
+        with self.db.connect() as conn:
+            for rec in records:
+                conn.execute(
+                    sent_messages.update()
+                    .where(
+                        and_(
+                            sent_messages.c.project_id == self.project_id,
+                            sent_messages.c.mailbox_name == mailbox_name,
+                            sent_messages.c.message_id == rec["message_id"],
+                        )
+                    )
+                    .values(source=rec["source"], match_reason=rec["match_reason"], submit_host=rec["submit_host"])
+                )
+        return len(records)
+
     def counts_by_source(self, since: dt.datetime, domain: Optional[str] = None) -> List[Dict[str, Any]]:
         """Per-domain, per-source counts within a window — the input to the
         domain list's "Wysłano" metric (see health.py's ``build_domain_status``)."""
@@ -918,6 +937,24 @@ class SentRepository(_BaseRepository):
             .group_by(day, sent_messages.c.sending_domain, sent_messages.c.source)
             .order_by(day)
         )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def send_times(
+        self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
+    ) -> List[Dict[str, Any]]:
+        """Raw (sent_at, source) rows — for hourly bucketing, which is done in
+        Python rather than SQL because hour-truncation isn't portable between
+        SQLite and Postgres the way func.date() is."""
+        conditions = [
+            sent_messages.c.project_id == self.project_id,
+            sent_messages.c.sent_at >= since,
+        ]
+        if isinstance(domain, str):
+            conditions.append(sent_messages.c.sending_domain == domain)
+        elif domain:
+            conditions.append(sent_messages.c.sending_domain.in_(domain))
+        stmt = select(sent_messages.c.sent_at, sent_messages.c.source).where(and_(*conditions))
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 

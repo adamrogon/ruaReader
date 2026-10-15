@@ -42,6 +42,7 @@ from ..storage import (
     DomainConfigRepository,
     FolderRepository,
     MailboxConfigRepository,
+    SentRepository,
     get_database,
 )
 from ..validate import test_domain, test_mailbox
@@ -1094,6 +1095,45 @@ def api_bounces(domain: Optional[List[str]] = Query(None), days: int = Query(14,
 
     return JSONResponse(
         {"labels": axis, **{key: [series[key][d] for d in axis] for key in classes}}
+    )
+
+
+_SENT_SOURCES = ("extender", "instantly", "unrecognized")
+
+
+@app.get("/api/sent")
+def api_sent(domain: Optional[List[str]] = Query(None), days: int = Query(14, ge=1, le=90)) -> JSONResponse:
+    """Sent-folder volume (Module 5) split by source. A 1-day window comes
+    back in hourly buckets (24 UTC hours, ISO strings) — a daily axis would
+    be a single point; anything longer is daily, on the same axis as the
+    other charts."""
+    ctx = _context()
+    repo = SentRepository(ctx["database"], ctx["settings"].project_id)
+
+    if days == 1:
+        now = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+        hours = [now - dt.timedelta(hours=offset) for offset in range(23, -1, -1)]
+        axis = [h.strftime("%Y-%m-%dT%H:00:00Z") for h in hours]
+        series = {key: {h: 0 for h in axis} for key in _SENT_SOURCES}
+        for row in repo.send_times(hours[0], domain):
+            sent_at = row["sent_at"]
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=dt.timezone.utc)
+            bucket = sent_at.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+            if row["source"] in series and bucket in series[row["source"]]:
+                series[row["source"]][bucket] += 1
+        granularity = "hour"
+    else:
+        axis = _date_axis(days)
+        series = {key: {day: 0 for day in axis} for key in _SENT_SOURCES}
+        for row in repo.daily_counts(_since(days), domain):
+            day = _day_key(row["day"])
+            if row["source"] in series and day in series[row["source"]]:
+                series[row["source"]][day] += row["count"] or 0
+        granularity = "day"
+
+    return JSONResponse(
+        {"labels": axis, "granularity": granularity, **{key: [series[key][x] for x in axis] for key in _SENT_SOURCES}}
     )
 
 

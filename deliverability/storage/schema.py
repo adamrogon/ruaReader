@@ -222,6 +222,9 @@ sent_messages = Table(
     # Which signal fired — kept purely so a human can sanity-check a
     # classification without re-deriving the heuristic from memory.
     Column("match_reason", String(64)),
+    # Submitting host from the Received chain — kept so a signal change can
+    # be reclassified from the database without re-reading every mailbox.
+    Column("submit_host", String(255)),
     Column("recipient_domain", String(255), index=True),
     Column("subject", Text),
     Column("ingested_at", DateTime, nullable=False),

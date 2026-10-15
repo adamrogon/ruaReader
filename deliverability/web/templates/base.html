@@ -115,6 +115,8 @@
       block: '#ef4444',
       spfFail: '#ec4899',
       dkimFail: '#f59e0b',
+      extender: '#e9941e',
+      instantly: '#8b5cf6',
     };
 
     function currentIsDark() {
@@ -181,6 +183,50 @@
           legendTip.style.display = 'none';
         },
       };
+    }
+
+    // Sent-folder volume (Module 5) as a line chart — one shared builder for
+    // the home, /domains, folder and domain pages so they can't drift apart.
+    // `d` is an /api/sent response; hourly buckets arrive as UTC ISO strings
+    // and are shown in the viewer's own local time.
+    const SENT_L = {
+      extender: {{ t('chart.legend.extender') | tojson }},
+      instantly: {{ t('chart.legend.instantly') | tojson }},
+      unrecognized: {{ t('chart.legend.unrecognized') | tojson }},
+      axis: {{ t('chart.axis.sent') | tojson }},
+    };
+    const SENT_HINTS = {
+      [SENT_L.extender]: {{ t('chart.legend.extender_hint') | tojson }},
+      [SENT_L.instantly]: {{ t('chart.legend.instantly_hint') | tojson }},
+      [SENT_L.unrecognized]: {{ t('chart.legend.unrecognized_hint') | tojson }},
+    };
+    function sentChart(canvas, d) {
+      const labels = d.granularity === 'hour'
+        ? d.labels.map((iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        : d.labels;
+      const line = (label, data, color, extra) => ({
+        label, data, borderColor: color, backgroundColor: color,
+        borderWidth: 2, pointRadius: 2, tension: 0.3, ...extra,
+      });
+      return new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            line(SENT_L.extender, d.extender, PALETTE.extender, { borderWidth: 3, pointRadius: 3 }),
+            line(SENT_L.instantly, d.instantly, PALETTE.instantly),
+            line(SENT_L.unrecognized, d.unrecognized, PALETTE.unknown, { borderDash: [6, 3], pointRadius: 0 }),
+          ],
+        },
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: TOOLTIP, legend: legendHintHandlers(SENT_HINTS) },
+          scales: {
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, title: { display: true, text: SENT_L.axis } },
+          },
+        },
+      });
     }
 
     // Generic hover tooltips for any element carrying data-hint="...": table

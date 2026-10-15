@@ -159,6 +159,11 @@
     <div class="chart-box"><canvas id="bounceChart"></canvas></div>
   </div>
 </div>
+<div class="card" style="margin-top:14px">
+  <div class="card-title">{{ t('chart.sent.title') }}</div>
+  <div class="card-sub">{{ t('chart.sent.sub') }}</div>
+  <div class="chart-box"><canvas id="sentChart"></canvas></div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -244,6 +249,17 @@ const BOUNCE_LEGEND_HINTS = {
 
 let volumeChart = null;
 let bounceChart = null;
+let sentChartInstance = null;
+
+function loadSentChart(domains) {
+  if (sentChartInstance) { sentChartInstance.destroy(); sentChartInstance = null; }
+  if (domains && domains.length === 0) return;
+  const filter = domains ? `&${domainQuery(domains)}` : '';
+  fetch(`/api/sent?days=${DAYS}${filter}`).then(r => r.json()).then(d => {
+    if (sentChartInstance) sentChartInstance.destroy();
+    sentChartInstance = sentChart(document.getElementById('sentChart'), d);
+  });
+}
 
 function domainQuery(domains) {
   return domains.map(d => `domain=${encodeURIComponent(d)}`).join('&');
@@ -376,7 +392,7 @@ function loadBounceChart(domains) {
 // omits domain= entirely rather than listing every domain explicitly.
 (function () {
   const filterBox = document.getElementById('domain-filter');
-  if (!filterBox) { loadVolumeChart(null); loadBounceChart(null); return; }
+  if (!filterBox) { loadVolumeChart(null); loadBounceChart(null); loadSentChart(null); return; }
   const allBox = filterBox.querySelector('.js-domain-all');
   const boxes = Array.from(filterBox.querySelectorAll('.js-domain-toggle'));
   const details = filterBox.querySelector('.domain-filter-toggle');
@@ -392,6 +408,7 @@ function loadBounceChart(domains) {
     const domains = selected();
     loadVolumeChart(domains);
     loadBounceChart(domains);
+    loadSentChart(domains);
     const checkedCount = boxes.filter(b => b.checked).length;
     summaryText.textContent = checkedCount === boxes.length
       ? T_PICK

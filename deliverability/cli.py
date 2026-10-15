@@ -77,7 +77,7 @@ def cmd_dnsbl(args: argparse.Namespace) -> int:
 def cmd_sent(args: argparse.Namespace) -> int:
     from .ingest import sent
 
-    result = sent.run(since_days=args.since_days)
+    result = sent.run(since_days=args.since_days, update_existing=args.update_existing)
     _print(result, args.json)
     return 0 if result["status"] == "ok" else 1
 
@@ -171,6 +171,11 @@ def main(argv=None) -> int:
 
     sent_parser = sub.add_parser("sent", help="Ingest Sent-folder volume, split real campaigns from warm-up.")
     sent_parser.add_argument("--since-days", type=int, default=7)
+    sent_parser.add_argument(
+        "--update-existing",
+        action="store_true",
+        help="Also re-classify messages already stored (after a classifier signal change).",
+    )
     sent_parser.set_defaults(func=cmd_sent)
 
     daily_parser = sub.add_parser("daily", help="Run rua + dns + dnsbl.")

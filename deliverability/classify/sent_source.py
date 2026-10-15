@@ -50,6 +50,40 @@ _INSTANTLY_RECEIVED_RE = re.compile(r"\bec2-[\d-]+\.compute-1\.amazonaws\.com\b"
 # subject, e.g. "Ed, are you free? | 83CMDKB DHFGPG3".
 _INSTANTLY_SUBJECT_CODE_RE = re.compile(r"\|\s*[A-Z0-9]{5,10}\s+[A-Z0-9]{5,10}\s*$")
 
+# Extender's own sending server as the SMTP submitter in the Received chain
+# (HELO app.linkhouse.co or [127.0.0.1], source address in Linkhouse's OVH
+# block 2001:41d0:602:3bad::/64). Since 2026-10-14 this is the only Extender
+# signal left fleet-wide: the pixel is gone and Message-IDs switched from
+# @swift.generated to @mail.gmail.com — the same shape as replies a person
+# types in Gmail itself, which are submitted from Google's own
+# mail-*.google.com hosts instead and so correctly stay 'unrecognized'. Being
+# Linkhouse's own server, this only changes when that server is migrated.
+_EXTENDER_RECEIVED_RE = re.compile(r"\bapp\.linkhouse\.co\b|\[2001:41d0:602:3bad:", re.IGNORECASE)
+
+# Sent through the Gmail API by some application (Received: "from <Google
+# Cloud project number> named unknown by gmailapi.google.com with HTTPREST").
+# Seen on 2026-10-12/13 as in-thread replies to publishers at a fixed
+# 4-minute cadence from project 1066552443927 — automated, but not yet
+# confirmed to be Extender, so it stays 'unrecognized' with its own reason
+# instead of being guessed into either bucket.
+_GMAIL_API_RE = re.compile(r"\bby\s+gmailapi\.google\.com\b", re.IGNORECASE)
+
+_SUBMIT_HOST_RE = re.compile(r"^\s*from\s+(.+?)\s+by\s+(\S+)", re.IGNORECASE)
+
+
+def submit_host(message: Message) -> str:
+    """The oldest Received hop's "from X by Y", e.g.
+    "[127.0.0.1] ([2001:41d0:602:3bad::]) by smtp.gmail.com" or
+    "1066552443927 named unknown by gmailapi.google.com". Stored alongside
+    each row so a future signal change can be reclassified from the database
+    alone, without re-reading every mailbox (see scripts/reclassify_sent.py)."""
+    received = message.get_all("Received") or []
+    if not received:
+        return ""
+    oldest = " ".join(str(received[-1]).split())
+    match = _SUBMIT_HOST_RE.search(oldest)
+    return f"{match.group(1)} by {match.group(2)}"[:255] if match else oldest[:255]
+
 
 def classify_sent_message(message: Message, body_text: str = "") -> Tuple[str, str]:
     """Return ``(source, match_reason)`` for one message from a Sent folder.
@@ -72,6 +106,10 @@ def classify_sent_message(message: Message, body_text: str = "") -> Tuple[str, s
         return SOURCE_INSTANTLY, "received_ec2"
     if _INSTANTLY_SUBJECT_CODE_RE.search(subject):
         return SOURCE_INSTANTLY, "subject_code"
+    if _EXTENDER_RECEIVED_RE.search(received_headers):
+        return SOURCE_EXTENDER, "submit_host"
     if _EXTENDER_MESSAGE_ID_RE.search(message_id):
         return SOURCE_EXTENDER, "message_id"
+    if _GMAIL_API_RE.search(received_headers):
+        return SOURCE_UNRECOGNIZED, "gmail_api"
     return SOURCE_UNRECOGNIZED, "no_match"

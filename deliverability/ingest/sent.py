@@ -22,7 +22,7 @@ import re
 from email.message import Message
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..classify.sent_source import classify_sent_message
+from ..classify.sent_source import classify_sent_message, submit_host
 from ..config import Mailbox, Settings, load_sent_mailboxes
 from ..storage import Database, IngestionRunRepository, SentRepository, get_database
 from .imap_client import fetch_messages, header_datetime, open_mailbox
@@ -97,6 +97,7 @@ def parse_sent(message: Message, mailbox: Mailbox) -> Dict[str, Any]:
         "sent_at": header_datetime(message),
         "source": source,
         "match_reason": reason,
+        "submit_host": submit_host(message) or None,
         "recipient_domain": recipient_domain,
         "subject": subject[:500] or None,
     }
@@ -106,8 +107,14 @@ def ingest_mailbox(
     mailbox: Mailbox,
     repository: SentRepository,
     since_days: int = 7,
+    update_existing: bool = False,
 ) -> Dict[str, int]:
-    """Read one sending mailbox's Sent folder and store any new messages."""
+    """Read one sending mailbox's Sent folder and store any new messages.
+
+    ``update_existing`` also rewrites the classification of messages already
+    stored — the catch-up path after a classifier signal changes, for rows
+    whose evidence (body, Received headers) was never stored.
+    """
     stats = {
         "messages": 0,
         "stored": 0,
@@ -115,6 +122,7 @@ def ingest_mailbox(
         "extender": 0,
         "instantly": 0,
         "unrecognized": 0,
+        "updated": 0,
     }
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=since_days)).date()
 
@@ -141,6 +149,10 @@ def ingest_mailbox(
             for rec in fresh:
                 stats[rec["source"]] = stats.get(rec["source"], 0) + 1
 
+        if update_existing:
+            stale = [rec for _, rec in candidates if rec["message_id"] in existing]
+            stats["updated"] = repository.update_classification(mailbox.name, stale)
+
     return stats
 
 
@@ -149,6 +161,7 @@ def run(
     database: Optional[Database] = None,
     mailboxes: Optional[Sequence[Mailbox]] = None,
     since_days: int = 7,
+    update_existing: bool = False,
 ) -> Dict[str, Any]:
     """Ingest every configured sent mailbox, recording the run."""
     settings = settings or Settings.from_env()
@@ -166,6 +179,7 @@ def run(
         "extender": 0,
         "instantly": 0,
         "unrecognized": 0,
+        "updated": 0,
     }
     per_mailbox: Dict[str, Any] = {}
     failures: List[str] = []
@@ -173,14 +187,14 @@ def run(
     for mailbox in mailboxes:
         try:
             try:
-                stats = ingest_mailbox(mailbox, repository, since_days=since_days)
+                stats = ingest_mailbox(mailbox, repository, since_days=since_days, update_existing=update_existing)
             except Exception:  # noqa: BLE001
                 # ingest_mailbox() opens its own connection, so retrying the
                 # whole call gets a fresh IMAPClient/socket — see
                 # bounce.run()'s identical retry for why this matters more
                 # than a batch-level retry inside fetch_messages() can.
                 logger.warning("Sent ingestion failed for %s, retrying once with a fresh connection", mailbox.name)
-                stats = ingest_mailbox(mailbox, repository, since_days=since_days)
+                stats = ingest_mailbox(mailbox, repository, since_days=since_days, update_existing=update_existing)
             per_mailbox[mailbox.name] = stats
             for key, value in stats.items():
                 totals[key] = totals.get(key, 0) + value

@@ -197,6 +197,11 @@
     <div class="chart-box"><canvas id="espChart"></canvas></div>
   </div>
 </div>
+<div class="card" style="margin-top:14px">
+  <div class="card-title">{{ t('chart.sent.title') }}</div>
+  <div class="card-sub">{{ t('chart.sent.sub') }}</div>
+  <div class="chart-box"><canvas id="sentChart"></canvas></div>
+</div>
 
 {# --- Consolidated bounce summary: tabs over one shared detail panel ------ #}
 {# Used to be one flat table — a row per (code, class, provider) combo —
@@ -596,6 +601,10 @@ function goToDay(evt, elements, chart) {
   const date = chart.data.labels[elements[0].index];
   window.location.href = `/domain/${encodeURIComponent(DOMAIN)}/day/${date}?lang=${LANG}`;
 }
+
+fetch(`/api/sent?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()).then(d => {
+  sentChart(document.getElementById('sentChart'), d);
+});
 
 fetch(`/api/volume?days=${DAYS}&domain=${encodeURIComponent(DOMAIN)}`).then(r => r.json()).then(d => {
   new Chart(document.getElementById('volumeChart'), {

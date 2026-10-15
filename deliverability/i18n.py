@@ -143,6 +143,32 @@ MESSAGES: dict = {
         "pl": "Słupki to wysłane wiadomości, linie to odbicia — łatwo zestawić skalę.",
         "en": "Bars are messages sent, lines are bounces — easy to compare scale.",
     },
+    "chart.sent.title": {"pl": "Wysłane maile (folder Wysłane)", "en": "Emails sent (Sent folder)"},
+    "chart.sent.sub": {
+        "pl": "Co faktycznie wyszło ze skrzynek, prawie na bieżąco — bez opóźnienia raportów DMARC. "
+        "Przy 1d podział godzinowy. Tylko domeny z działającą skrzynką Wysłane.",
+        "en": "What actually left the mailboxes, near real time — no DMARC report lag. "
+        "Hourly at 1d. Only domains with a working Sent mailbox.",
+    },
+    "chart.axis.sent": {"pl": "wysłane", "en": "sent"},
+    "chart.legend.extender": {"pl": "Extender (kampanie)", "en": "Extender (campaigns)"},
+    "chart.legend.extender_hint": {
+        "pl": "Prawdziwe kampanie z Extendera — pierwsze maile i follow-upy razem.",
+        "en": "Real Extender campaigns — first emails and follow-ups together.",
+    },
+    "chart.legend.instantly": {"pl": "Instantly (rozgrzewka)", "en": "Instantly (warm-up)"},
+    "chart.legend.instantly_hint": {
+        "pl": "Ruch rozgrzewkowy z Instantly — nie liczy się do kolumny Wysłano na liście domen.",
+        "en": "Instantly warm-up traffic — not counted in the Sent column on the domain list.",
+    },
+    "chart.legend.unrecognized": {"pl": "Nierozpoznane", "en": "Unrecognized"},
+    "chart.legend.unrecognized_hint": {
+        "pl": "Nie pasuje pewnie ani do Extendera, ani do Instantly — np. odpowiedzi wysłane przez Gmail API "
+        "narzędziem, którego jeszcze nie rozpoznajemy, albo ręcznie. Nagły skok znaczy, że któreś narzędzie "
+        "zmieniło format maili.",
+        "en": "Matches neither Extender nor Instantly with confidence — e.g. replies sent through the Gmail API "
+        "by a tool not yet identified, or by hand. A sudden jump means one of the tools changed its email format.",
+    },
     "chart.legend.volume_hint": {
         "pl": "Łączny dzienny wolumen wysłanych wiadomości (z raportów DMARC) — tło do porównania z odbiciami.",
         "en": "Total daily messages sent (from DMARC reports) — background to compare against bounces.",

@@ -35,6 +35,8 @@ from deliverability.classify.sent_source import (  # noqa: E402
     SOURCE_INSTANTLY,
     SOURCE_UNRECOGNIZED,
     _EXTENDER_MESSAGE_ID_RE,
+    _EXTENDER_RECEIVED_RE,
+    _INSTANTLY_RECEIVED_RE,
     _INSTANTLY_SUBJECT_CODE_RE,
 )
 from deliverability.config import Settings  # noqa: E402
@@ -52,7 +54,12 @@ def main() -> None:
     with database.connect() as conn:
         rows = list(
             conn.execute(
-                select(sent_messages.c.id, sent_messages.c.message_id, sent_messages.c.subject)
+                select(
+                    sent_messages.c.id,
+                    sent_messages.c.message_id,
+                    sent_messages.c.subject,
+                    sent_messages.c.submit_host,
+                )
                 .where(
                     sent_messages.c.project_id == settings.project_id,
                     sent_messages.c.source == SOURCE_UNRECOGNIZED,
@@ -64,11 +71,16 @@ def main() -> None:
             scanned += 1
             r = row._mapping
 
+            host = r["submit_host"] or ""
             new_source, new_reason = None, None
-            if _EXTENDER_MESSAGE_ID_RE.search(r["message_id"] or ""):
-                new_source, new_reason = SOURCE_EXTENDER, "message_id"
+            if _INSTANTLY_RECEIVED_RE.search(host):
+                new_source, new_reason = SOURCE_INSTANTLY, "received_ec2"
             elif _INSTANTLY_SUBJECT_CODE_RE.search(r["subject"] or ""):
                 new_source, new_reason = SOURCE_INSTANTLY, "subject_code"
+            elif _EXTENDER_RECEIVED_RE.search(host):
+                new_source, new_reason = SOURCE_EXTENDER, "submit_host"
+            elif _EXTENDER_MESSAGE_ID_RE.search(r["message_id"] or ""):
+                new_source, new_reason = SOURCE_EXTENDER, "message_id"
 
             if new_source:
                 conn.execute(
