@@ -8,6 +8,7 @@ code.
 
 from .database import Database, get_database
 from .repositories import (
+    AlertStateRepository,
     BlacklistRepository,
     BounceRepository,
     DismissedFlagRepository,
@@ -21,6 +22,7 @@ from .repositories import (
 )
 
 __all__ = [
+    "AlertStateRepository",
     "Database",
     "get_database",
     "DmarcRepository",

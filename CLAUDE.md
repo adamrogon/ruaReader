@@ -24,7 +24,10 @@ cp .env.example .env   # fill in credentials; generate SECRET_KEY with `delivera
 ./scripts/restart_dashboard.sh [port]
 
 # Run one ingestion stream by hand (same code path cron/the "Check everything" button use)
-.venv/bin/python -m deliverability.cli rua|dns|bounce|dnsbl|daily
+.venv/bin/python -m deliverability.cli rua|dns|bounce|dnsbl|sent|daily
+# Slack alerts (needs SLACK_WEBHOOK_URL in .env); --dry-run prints without sending or saving state
+.venv/bin/python -m deliverability.cli alerts [--dry-run]
+.venv/bin/python -m deliverability.cli hourly   # bounce + sent + alerts, meant for an hourly cron
 .venv/bin/python -m deliverability.cli status --lang pl   # prints dashboard state, no network calls
 ```
 
@@ -72,6 +75,12 @@ These aren't defensive-programming-in-general; each one was added after actually
 - **`rua.py`/`bounce.py`'s `run()` retries a failed mailbox once, on a fresh `IMAPClient` connection**, not a retry on the same socket — `open_mailbox()` opens its own connection per call, so wrapping the whole `ingest_mailbox()` call (not just an inner batch-fetch) gets a genuinely new socket. Fixes `SSL: BAD_WRITE_RETRY`-type errors from a connection held open across more work than before (e.g. scanning both an inbox and its Junk folder).
 - **The "Check everything" button fires its 4 streams sequentially**, not concurrently — see the JS in `overview.html`/`folders.html` (`waitUntilFinished()` polling `/api/run/status` between each `POST`). Firing all 4 at once made peak memory the *sum* of all four streams simultaneously; this was the primary OOM cause on a full domain list. `jobs.py`'s `start()` itself only launches one stream — the sequencing is a frontend-level decision, not a backend guarantee, so a caller hitting the POST endpoints directly can still fire them concurrently.
 - **`IngestionRunRepository.fail_stale_running(older_than_minutes=30)`** self-heals a run stuck at `status='running'` (e.g. the process was `kill`ed mid-run) — without it, `active_streams()`'s guard blocks that stream from ever running again. `scripts/restart_dashboard.sh` calls this with `older_than_minutes=0` on every restart as a matter of habit, since killing the server while a background ingestion thread is active is exactly how a row gets orphaned in the first place.
+
+### Module 5 (Sent folder) and Slack alerts
+
+`ingest/sent.py` reads each sending mailbox's Sent folder; `classify/sent_source.py` labels every message `extender` / `instantly` / `unrecognized` by positive match only — never "not Instantly, so Extender". The signals are incidental details of each tool's sending setup and have already broken twice (a `$`-anchored Message-ID regex that never matched; Extender switching Message-IDs from `@swift.generated` to `@mail.gmail.com` on 2026-10-14), so `sent_messages.submit_host` stores the submitting Received hop: after a signal change, `scripts/reclassify_sent.py` can fix rows from the database, and `cli sent --update-existing` re-reads a window when that isn't enough. A sudden jump in `unrecognized` is the drift signal — investigate with fresh message headers rather than loosening a regex. Only servers that save a copy of SMTP-submitted mail to Sent work at all (Gmail does; web7.aftermarket.hosting doesn't — `UIDNEXT 1` on the Sent folder means nothing was ever stored there).
+
+`alerts.py` compares each domain's last 12 h of non-Instantly volume with the median of the same weekday-and-hours window over the previous 4 weeks (not a fixed threshold — weekends and nights have no Extender traffic), and posts one combined Slack message per run via `SLACK_WEBHOOK_URL`. It counts `unrecognized` as volume on purpose: a format change in a sending tool must surface as a `classifier_drift` alert, not as "silent" on every domain at once. Alert state (`alert_state` table) makes each condition announce once, remind daily, and announce its recovery once; state is saved only after Slack accepted the post. While the Sent import is stale nothing else is evaluated, and a mailbox the last import couldn't read gets a `mailbox_error` alert instead of a silence one. Test changes against a copy of the database with `post_to_slack` stubbed, not against the real channel.
 
 ### Domain/mailbox config lives in the DB, YAML seeds it once
 

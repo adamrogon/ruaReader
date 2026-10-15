@@ -1694,6 +1694,108 @@ MESSAGES: dict = {
         "en": "remove the unused provider from SPF → the counter drops",
     },
     "use_cases.mockup.skip_note": {"pl": "— zdrowa, pomiń", "en": "— healthy, skip"},
+
+    # --- Slack alerts (alerts.py) — Slack mrkdwn: *bold*, `code`, <url|text> ---
+    "alert.header": {"pl": "*ruaReader — alerty wysyłki* · {when}", "en": "*ruaReader — sending alerts* · {when}"},
+    "alert.many_silent": {
+        "pl": ":rotating_light: *Cisza na {n} domenach naraz.* Gdy staje tyle domen jednocześnie, to zwykle "
+        "problem po stronie Extendera (wstrzymane kampanie, awaria, zmiana konfiguracji), a nie pojedynczych skrzynek.",
+        "en": ":rotating_light: *{n} domains went quiet at once.* That many at the same time usually means a problem "
+        "in Extender itself (paused campaigns, an outage, a config change), not in individual mailboxes.",
+    },
+    "alert.silence.open_zero": {
+        "pl": ":rotating_light: *{domain}: nic nie wyszło od {hours} h*",
+        "en": ":rotating_light: *{domain}: nothing sent in {hours} h*",
+    },
+    "alert.silence.open_low": {
+        "pl": ":warning: *{domain}: bardzo mało wysyłki w ostatnich {hours} h*",
+        "en": ":warning: *{domain}: very little sent in the last {hours} h*",
+    },
+    "alert.silence.remind": {
+        "pl": ":hourglass: *{domain}: cisza trwa od {since}*",
+        "en": ":hourglass: *{domain}: still quiet since {since}*",
+    },
+    "alert.silence.numbers": {
+        "pl": "Ostatnie {hours} h: *{actual}* maili (bez Instantly). Zwykle o tej porze: ok. *{expected}* "
+        "(mediana z {weeks} poprzednich tygodni, ten sam dzień tygodnia i godziny).",
+        "en": "Last {hours} h: *{actual}* emails (Instantly excluded). Usually at this time: about *{expected}* "
+        "(median of the previous {weeks} weeks, same weekday and hours).",
+    },
+    "alert.silence.last_sent": {
+        "pl": "Ostatni wysłany mail (bez Instantly): {when}, {ago} h temu.",
+        "en": "Last email sent (Instantly excluded): {when}, {ago} h ago.",
+    },
+    "alert.silence.hint_mailbox_ok": {
+        "pl": "Interpretacja: skrzynka działa, bo rozgrzewka Instantly dalej wychodzi ({instantly} w tym czasie). "
+        "Najpewniej kampanie tej domeny w Extenderze się skończyły, są wstrzymane albo Extender ma błąd wysyłki. "
+        "Sprawdź je w Extenderze.",
+        "en": "Interpretation: the mailbox works, since Instantly warm-up is still going out ({instantly} in this window). "
+        "Most likely this domain's Extender campaigns ended, are paused, or Extender has a sending error. "
+        "Check them in Extender.",
+    },
+    "alert.silence.hint_mailbox_dead": {
+        "pl": "Interpretacja: z tej skrzynki nie wychodzi też rozgrzewka Instantly, więc problem jest raczej w samej "
+        "skrzynce lub koncie (zmienione hasło, blokada konta Google, limit wysyłki), a nie w kampanii.",
+        "en": "Interpretation: Instantly warm-up isn't going out of this mailbox either, so the problem is more likely "
+        "the mailbox or account itself (changed password, Google account lock, sending limit) than a campaign.",
+    },
+    "alert.silence.hint_generic": {
+        "pl": "Interpretacja: sprawdź kampanie tej domeny w Extenderze.",
+        "en": "Interpretation: check this domain's campaigns in Extender.",
+    },
+    "alert.silence.context": {
+        "pl": "Inne sygnały w ruaReaderze: {headline}",
+        "en": "Other signals in ruaReader: {headline}",
+    },
+    "alert.silence.resolved": {
+        "pl": ":white_check_mark: *{domain}: wysyłka wróciła* — ostatnie {hours} h: {actual} maili (zwykle ok. {expected}).",
+        "en": ":white_check_mark: *{domain}: sending is back* — last {hours} h: {actual} emails (usually about {expected}).",
+    },
+    "alert.mailbox.open": {
+        "pl": ":no_entry: *{domain}: nie mogę odczytać skrzynki Wysłane* ({mailbox}). Błąd: `{error}`",
+        "en": ":no_entry: *{domain}: can't read the Sent mailbox* ({mailbox}). Error: `{error}`",
+    },
+    "alert.mailbox.remind": {
+        "pl": ":hourglass: *{domain}: skrzynka Wysłane wciąż nie do odczytania* (od {since}). Błąd: `{error}`",
+        "en": ":hourglass: *{domain}: Sent mailbox still unreadable* (since {since}). Error: `{error}`",
+    },
+    "alert.mailbox.auth_hint": {
+        "pl": "Wygląda na zmienione albo nieważne hasło. Jeśli Extender loguje się tym samym hasłem, wysyłka z tej "
+        "domeny może stać. Zaktualizuj hasło w Extenderze i w Ustawieniach ruaReadera.",
+        "en": "Looks like a changed or expired password. If Extender logs in with the same password, sending from this "
+        "domain may be stuck too. Update it in Extender and in ruaReader Settings.",
+    },
+    "alert.mailbox.resolved": {
+        "pl": ":white_check_mark: *{domain}: skrzynka Wysłane znowu się odczytuje.*",
+        "en": ":white_check_mark: *{domain}: the Sent mailbox reads fine again.*",
+    },
+    "alert.stale.open": {
+        "pl": ":warning: *Import folderu Wysłane nie działał od {hours} h* (ostatni udany: {when}). Dopóki nie ruszy, "
+        "alerty o ciszy na domenach są wstrzymane, bo nie ma świeżych danych.",
+        "en": ":warning: *The Sent-folder import hasn't run for {hours} h* (last success: {when}). Until it does, "
+        "silence alerts are paused — there's no fresh data to judge.",
+    },
+    "alert.stale.never": {
+        "pl": ":warning: *Import folderu Wysłane jeszcze nigdy się nie udał*, więc alerty o ciszy nie mają danych.",
+        "en": ":warning: *The Sent-folder import has never succeeded yet*, so silence alerts have no data.",
+    },
+    "alert.stale.resolved": {
+        "pl": ":white_check_mark: *Import folderu Wysłane znowu działa.* Alerty o ciszy są wznowione.",
+        "en": ":white_check_mark: *The Sent-folder import is running again.* Silence alerts resumed.",
+    },
+    "alert.drift.open": {
+        "pl": ":mag: *{pct}% maili z ostatnich {hours} h (bez Instantly) nie pasuje do żadnego znanego narzędzia.* "
+        "Extender mógł zmienić format wysyłki. Alerty o ciszy liczą te maile normalnie, ale rozbicie na wykresie "
+        "Wysłane może być błędne. Trzeba sprawdzić rozpoznawanie maili (classify/sent_source.py).",
+        "en": ":mag: *{pct}% of emails in the last {hours} h (Instantly excluded) match no known tool.* "
+        "Extender may have changed how it sends. Silence alerts still count them, but the split on the Sent chart "
+        "may be wrong. Check email recognition (classify/sent_source.py).",
+    },
+    "alert.drift.resolved": {
+        "pl": ":white_check_mark: *Rozpoznawanie maili znów wygląda normalnie* ({pct}% nierozpoznanych).",
+        "en": ":white_check_mark: *Email recognition looks normal again* ({pct}% unrecognized).",
+    },
+    "alert.link": {"pl": "<{url}|Otwórz w ruaReaderze>", "en": "<{url}|Open in ruaReader>"},
 }
 
 

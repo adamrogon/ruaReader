@@ -233,6 +233,29 @@ sent_messages = Table(
 )
 
 
+# --- Slack alerts -------------------------------------------------------------
+#
+# One row per (domain, kind) — what alerts.py last told Slack, so an ongoing
+# problem is announced once (plus a daily reminder) and its recovery once,
+# instead of every hourly run repeating the same message.
+
+alert_state = Table(
+    "alert_state",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("project_id", String(64), nullable=False, index=True),
+    # A sending domain, or "*" for fleet-wide conditions.
+    Column("domain", String(255), nullable=False),
+    # 'silence' | 'mailbox_error' | 'stale' | 'classifier_drift'
+    Column("kind", String(32), nullable=False),
+    Column("active", Boolean, nullable=False, default=False),
+    Column("opened_at", DateTime),
+    Column("last_notified_at", DateTime),
+    Column("detail", JSON),
+    UniqueConstraint("project_id", "domain", "kind", name="uq_alert_state"),
+)
+
+
 # --- Ingestion health ---------------------------------------------------------
 
 ingestion_runs = Table(
@@ -363,6 +386,7 @@ ALL_TABLES = (
     bounces,
     blacklist_checks,
     sent_messages,
+    alert_state,
     ingestion_runs,
     domains,
     mailboxes,

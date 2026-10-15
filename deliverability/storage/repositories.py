@@ -13,6 +13,7 @@ from sqlalchemy import and_, case, desc, func, select
 
 from .database import Database
 from .schema import (
+    alert_state,
     blacklist_checks,
     bounces,
     dismissed_flags,
@@ -940,6 +941,49 @@ class SentRepository(_BaseRepository):
         with self.db.connect() as conn:
             return _rows(conn.execute(stmt))
 
+    def counts_between(self, start: dt.datetime, end: dt.datetime) -> List[Dict[str, Any]]:
+        """Per-domain, per-source counts in [start, end) — the alert window
+        and each of its week-earlier baselines (see alerts.py)."""
+        stmt = (
+            select(
+                sent_messages.c.sending_domain.label("domain"),
+                sent_messages.c.source,
+                func.count(sent_messages.c.id).label("count"),
+            )
+            .where(
+                and_(
+                    sent_messages.c.project_id == self.project_id,
+                    sent_messages.c.sent_at >= start,
+                    sent_messages.c.sent_at < end,
+                )
+            )
+            .group_by(sent_messages.c.sending_domain, sent_messages.c.source)
+        )
+        with self.db.connect() as conn:
+            return _rows(conn.execute(stmt))
+
+    def sent_span_per_domain(self, exclude_source: str = "instantly") -> Dict[str, Dict[str, Any]]:
+        """First and last stored send per domain, ignoring one source — the
+        first bounds which baseline weeks count as history (a week before
+        monitoring started isn't a week of silence), the last is the "last
+        mail went out at" line in an alert."""
+        stmt = (
+            select(
+                sent_messages.c.sending_domain.label("domain"),
+                func.min(sent_messages.c.sent_at).label("first"),
+                func.max(sent_messages.c.sent_at).label("last"),
+            )
+            .where(
+                and_(
+                    sent_messages.c.project_id == self.project_id,
+                    sent_messages.c.source != exclude_source,
+                )
+            )
+            .group_by(sent_messages.c.sending_domain)
+        )
+        with self.db.connect() as conn:
+            return {row["domain"]: row for row in _rows(conn.execute(stmt))}
+
     def send_times(
         self, since: dt.datetime, domain: Optional[Union[str, Sequence[str]]] = None
     ) -> List[Dict[str, Any]]:
@@ -1063,6 +1107,26 @@ class IngestionRunRepository(_BaseRepository):
                 )
             )
             return int(result.rowcount or 0)
+
+    def last_success_run(self, stream: str) -> Optional[Dict[str, Any]]:
+        """The most recent ok/partial run of one stream, whole row — alerts
+        need its start time (data is complete up to there) and its per-mailbox
+        detail, not just when it finished."""
+        stmt = (
+            select(ingestion_runs)
+            .where(
+                and_(
+                    ingestion_runs.c.project_id == self.project_id,
+                    ingestion_runs.c.stream == stream,
+                    ingestion_runs.c.status.in_(("ok", "partial")),
+                )
+            )
+            .order_by(desc(ingestion_runs.c.started_at))
+            .limit(1)
+        )
+        with self.db.connect() as conn:
+            rows = _rows(conn.execute(stmt))
+        return rows[0] if rows else None
 
     def last_success_per_stream(self) -> Dict[str, dt.datetime]:
         """When each stream last completed successfully.
@@ -1447,3 +1511,28 @@ class DismissedFlagRepository(_BaseRepository):
             )
 
 
+
+
+class AlertStateRepository(_BaseRepository):
+    """What alerts.py last told Slack, per (domain, kind)."""
+
+    def all(self) -> Dict[tuple, Dict[str, Any]]:
+        stmt = select(alert_state).where(alert_state.c.project_id == self.project_id)
+        with self.db.connect() as conn:
+            return {(row["domain"], row["kind"]): row for row in _rows(conn.execute(stmt))}
+
+    def save(self, domain: str, kind: str, **fields: Any) -> None:
+        """Upsert one (domain, kind) row with the given fields."""
+        key = and_(
+            alert_state.c.project_id == self.project_id,
+            alert_state.c.domain == domain,
+            alert_state.c.kind == kind,
+        )
+        with self.db.connect() as conn:
+            exists = conn.execute(select(alert_state.c.id).where(key)).first()
+            if exists:
+                conn.execute(alert_state.update().where(key).values(**fields))
+            else:
+                conn.execute(
+                    alert_state.insert().values(project_id=self.project_id, domain=domain, kind=kind, **fields)
+                )

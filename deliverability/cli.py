@@ -5,6 +5,8 @@
     python -m deliverability.cli bounce    # bounces / NDRs           (hourly)
     python -m deliverability.cli dnsbl     # blacklist checks         (daily)
     python -m deliverability.cli sent      # Sent-folder volume       (hourly)
+    python -m deliverability.cli alerts    # Slack alerts             (hourly, after sent)
+    python -m deliverability.cli hourly    # bounce + sent + alerts
     python -m deliverability.cli daily     # rua + dns + dnsbl
     python -m deliverability.cli status    # print current state, no network
 
@@ -80,6 +82,45 @@ def cmd_sent(args: argparse.Namespace) -> int:
     result = sent.run(since_days=args.since_days, update_existing=args.update_existing)
     _print(result, args.json)
     return 0 if result["status"] == "ok" else 1
+
+
+def cmd_alerts(args: argparse.Namespace) -> int:
+    from . import alerts
+
+    result = alerts.run(dry_run=args.dry_run, window_hours=args.window_hours)
+    if args.dry_run and result.get("text"):
+        print(result["text"])
+        print()
+    _print({k: v for k, v in result.items() if k != "text"}, args.json)
+    return 0 if result["status"] == "ok" else 1
+
+
+def cmd_hourly(args: argparse.Namespace) -> int:
+    """The hourly batch: fresh bounces and Sent-folder volume, then alerts.
+
+    Alerts run last and only see what the two imports managed to store; a
+    failed import shows up as a stale/mailbox alert rather than a crash.
+    """
+    from . import alerts
+    from .ingest import bounce, sent
+
+    results = {}
+    exit_code = 0
+    for name, runner in (
+        ("bounce", bounce.run),
+        ("sent", sent.run),
+        ("alerts", alerts.run),
+    ):
+        try:
+            results[name] = runner()
+            if results[name].get("status") != "ok":
+                exit_code = 1
+        except Exception as exc:  # noqa: BLE001
+            logging.exception("%s crashed", name)
+            results[name] = {"status": "error", "error": str(exc)}
+            exit_code = 1
+    _print(results, args.json)
+    return exit_code
 
 
 def cmd_daily(args: argparse.Namespace) -> int:
@@ -177,6 +218,14 @@ def main(argv=None) -> int:
         help="Also re-classify messages already stored (after a classifier signal change).",
     )
     sent_parser.set_defaults(func=cmd_sent)
+
+    alerts_parser = sub.add_parser("alerts", help="Send Slack alerts about domains that went quiet.")
+    alerts_parser.add_argument("--dry-run", action="store_true", help="Print what would be sent; send and store nothing.")
+    alerts_parser.add_argument("--window-hours", type=int, default=12)
+    alerts_parser.set_defaults(func=cmd_alerts)
+
+    hourly_parser = sub.add_parser("hourly", help="Run bounce + sent + alerts (for an hourly cron).")
+    hourly_parser.set_defaults(func=cmd_hourly)
 
     daily_parser = sub.add_parser("daily", help="Run rua + dns + dnsbl.")
     daily_parser.add_argument("--since-days", type=int, default=14)
